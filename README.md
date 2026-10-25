@@ -1,1 +1,1 @@
-# Proyecto-de-ProgramaciOn-A-I-J-K
+# Proyecto-de-Programacion-A-I-J-K
