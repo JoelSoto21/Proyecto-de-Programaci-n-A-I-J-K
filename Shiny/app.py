@@ -1,4 +1,3 @@
-
 from shiny import App, ui, render, reactive
 import plotly.express as px
 import pandas as pd
@@ -25,7 +24,6 @@ df = pd.read_csv(csv_path)
 # ==========================================
 
 app_ui = ui.page_fluid(
-
     ui.h2("Tablero de Indicadores de Salud Mental en Estudiantes"),
     ui.hr(),
 
@@ -35,7 +33,6 @@ app_ui = ui.page_fluid(
         # ==================================
         # PESTAÑA 1: INICIO
         # ==================================
-
         ui.nav_panel(
             "Inicio",
 
@@ -72,7 +69,6 @@ app_ui = ui.page_fluid(
         # ==================================
         # PESTAÑA 2: SUEÑO Y SALUD MENTAL
         # ==================================
-
         ui.nav_panel(
             "Sueño y Salud Mental",
 
@@ -85,9 +81,7 @@ app_ui = ui.page_fluid(
             ),
 
             ui.layout_sidebar(
-
                 ui.sidebar(
-
                     ui.h4("Filtros del Gráfico"),
 
                     ui.input_select(
@@ -119,86 +113,77 @@ app_ui = ui.page_fluid(
         # ==================================
         # PESTAÑA 3: ESTRÉS Y RENDIMIENTO
         # ==================================
+        ui.nav_panel(
+            "Estrés y Rendimiento",
 
-ui.nav_panel(
-    "Estrés y Rendimiento",
-
-    ui.h3("Análisis de Estrés y Rendimiento Académico"),
-
-    ui.p(
-        "Explora la relación entre el estrés académico, "
-        "el estrés financiero y el promedio de "
-        "calificaciones (GPA) de los estudiantes."
-    ),
-
-    ui.layout_sidebar(
-
-        ui.sidebar(
-            ui.h4("Filtros del Gráfico"),
-
-            # Seleccionar tipo de estrés
-            ui.input_select(
-                "tipo_estres",
-                "Selecciona el tipo de estrés:",
-                choices={
-                    "AcademicStress": "Estrés Académico",
-                    "FinancialStress": "Estrés Financiero"
-                }
-            ),
-
-            ui.hr(),
-
-            # Seleccionar tipo de gráfico
-            ui.input_select(
-                "tipo_grafico",
-                "Selecciona el tipo de gráfico:",
-                choices={
-                    "dispersion": "Gráfico de Dispersión",
-                    "cajas": "Diagrama de Cajas"
-                }
-            ),
-
-            ui.hr(),
-
-            # Barra para seleccionar observaciones
-            ui.input_slider(
-                "n_observaciones",
-                "Número de observaciones:",
-                min=1,
-                max=len(df),
-                value=min(300, len(df)),
-                step=1
-            ),
+            ui.h3("Análisis de Estrés y Rendimiento Académico"),
 
             ui.p(
-                f"Total de registros disponibles: {len(df)}"
+                "Explora la relación entre el estrés académico, "
+                "el estrés financiero y el promedio de "
+                "calificaciones (GPA) de los estudiantes."
+            ),
+
+            ui.layout_sidebar(
+                ui.sidebar(
+                    ui.h4("Filtros del Gráfico"),
+
+                    ui.input_select(
+                        "tipo_grafico",
+                        "Selecciona el tipo de gráfico:",
+                        choices={
+                            "dispersion": "Gráfico de Dispersión",
+                            "cajas": "Diagrama de Cajas"
+                        }
+                    ),
+
+                    # Solo se muestra para el gráfico de dispersión
+                    ui.panel_conditional(
+                        "input.tipo_grafico === 'dispersion'",
+
+                        ui.input_select(
+                            "tipo_estres",
+                            "Selecciona el tipo de estrés:",
+                            choices={
+                                "AcademicStress": "Estrés Académico",
+                                "FinancialStress": "Estrés Financiero"
+                            }
+                        )
+                    ),
+
+                    ui.hr(),
+
+                    ui.input_slider(
+                        "n_observaciones",
+                        "Número de observaciones:",
+                        min=1,
+                        max=len(df),
+                        value=min(300, len(df)),
+                        step=1
+                    ),
+
+                    ui.p(f"Total de registros: {len(df)}")
+                ),
+
+                ui.card(
+                    ui.card_header("Relación entre el Estrés y el GPA"),
+                    output_widget("plot_estres_gpa"),
+                    ui.output_text("resumen_observaciones")
+                )
+            ),
+
+            ui.hr(),
+
+            # Interpretación debajo del gráfico
+            ui.card(
+                ui.card_header("Interpretación Estadística"),
+                ui.output_ui("interpretacion_estres")
             )
         ),
 
-        ui.card(
-            ui.card_header(
-                "Relación entre el Estrés y el GPA"
-            ),
-
-            output_widget("plot_estres_gpa"),
-
-            ui.output_text("resumen_observaciones")
-        )
-    ),
-
-    ui.hr(),
-
-    # Interpretación debajo del gráfico
-    ui.card(
-        ui.card_header("Interpretación Estadística"),
-
-        ui.output_ui("interpretacion_estres")
-    )
-        ),
         # ==================================
         # PESTAÑA 4: APOYO SOCIAL Y FAMILIAR
         # ==================================
-
         ui.nav_panel(
             "Apoyo Social y Familiar",
 
@@ -291,28 +276,32 @@ def server(input, output, session):
     # PESTAÑA 3: ESTRÉS Y RENDIMIENTO
     # ==========================================
 
+    
+    # ==========================================
+    # PESTAÑA 3: ESTRÉS Y RENDIMIENTO
+    # ==========================================
+
     @reactive.calc
     def datos_estres():
 
-        variable = input.tipo_estres()
-        n = input.n_observaciones()
+        columnas = [
+            "AcademicStress",
+            "FinancialStress",
+            "GPA"
+        ]
 
-        # Convertir variables a numéricas
-        datos = df[[variable, "GPA"]].copy()
+        datos = df[columnas].copy()
 
-        datos[variable] = pd.to_numeric(
-            datos[variable], errors="coerce"
-        )
+        for columna in columnas:
+            datos[columna] = pd.to_numeric(
+                datos[columna],
+                errors="coerce"
+            )
 
-        datos["GPA"] = pd.to_numeric(
-            datos["GPA"], errors="coerce"
-        )
-
+        # Conservamos registros completos
         datos = datos.dropna()
 
-        # Seleccionar una muestra aleatoria reproducible
-        # La semilla fija evita que cambie al alternar gráficos
-        n = min(n, len(datos))
+        n = min(input.n_observaciones(), len(datos))
 
         if n > 0:
             datos = datos.sample(
@@ -329,18 +318,19 @@ def server(input, output, session):
     @render_widget
     def plot_estres_gpa():
 
-        variable = input.tipo_estres()
-        tipo = input.tipo_grafico()
+
         datos = datos_estres().copy()
+        tipo = input.tipo_grafico()
 
         nombres = {
             "AcademicStress": "Estrés Académico",
             "FinancialStress": "Estrés Financiero"
         }
 
-        nombre = nombres[variable]
-
         if tipo == "dispersion":
+
+            variable = input.tipo_estres()
+            nombre = nombres[variable]
 
             fig = px.scatter(
                 datos,
@@ -361,44 +351,90 @@ def server(input, output, session):
             )
 
             fig.update_layout(
-                coloraxis_showscale=False
+                coloraxis_showscale=False,
+                height=500
             )
 
         else:
 
-            # Tratar los niveles de estrés como categorías
-            datos["NivelEstres"] = datos[variable].astype(str)
+            # Convertir los dos tipos de estrés
+            # a formato largo
+            datos_largos = datos.melt(
+                id_vars="GPA",
+                value_vars=[
+                    "AcademicStress",
+                    "FinancialStress"
+                ],
+                var_name="TipoEstres",
+                value_name="NivelEstres"
+            )
 
-            orden = [
-                str(x)
-                for x in sorted(datos[variable].unique())
+            datos_largos["TipoEstres"] = (
+                datos_largos["TipoEstres"].map(nombres)
+            )
+
+            # Agrupar los niveles de estrés
+            # en intervalos para facilitar la lectura
+            etiquetas = [
+                "Hasta 2",
+                "2 a 4",
+                "4 a 6",
+                "6 a 8",
+                "Más de 8"
             ]
 
+            datos_largos["GrupoEstres"] = pd.cut(
+                datos_largos["NivelEstres"],
+                bins=[
+                    float("-inf"),
+                    2, 4, 6, 8,
+                    float("inf")
+                ],
+                labels=etiquetas
+            )
+
+            # Dos diagramas de cajas:
+            # académico y financiero
             fig = px.box(
-                datos,
-                x="NivelEstres",
+                datos_largos,
+                x="GrupoEstres",
                 y="GPA",
-                color="NivelEstres",
+                color="TipoEstres",
+                facet_col="TipoEstres",
                 points="outliers",
                 category_orders={
-                    "NivelEstres": orden
+                    "GrupoEstres": etiquetas,
+                    "TipoEstres": [
+                        "Estrés Académico",
+                        "Estrés Financiero"
+                    ]
                 },
-                title=f"Distribución del GPA según {nombre}",
                 labels={
-                    "NivelEstres": nombre,
+                    "GrupoEstres": "Nivel de Estrés",
                     "GPA": "Promedio de Calificaciones (GPA)"
                 },
+                title=(
+                    "Distribución del GPA según "
+                    "Estrés Académico y Financiero"
+                ),
                 template="plotly_white"
             )
 
             fig.update_layout(
-                showlegend=False
+                showlegend=False,
+                height=550
+            )
+
+            # Limpiar títulos de los paneles
+            fig.for_each_annotation(
+                lambda a: a.update(
+                    text=a.text.split("=")[-1]
+                )
             )
 
         fig.update_layout(
             title_x=0.5,
-            height=500,
-            margin=dict(t=70, b=60)
+            margin=dict(t=90, b=70)
         )
 
         return fig
@@ -412,7 +448,9 @@ def server(input, output, session):
 
         n = len(datos_estres())
 
-        return f"Observaciones utilizadas en el gráfico: {n}"
+        return (
+            f"Estudiantes analizados: {n}"
+        )
 
     # ==========================================
     # INTERPRETACIÓN AUTOMÁTICA
@@ -421,151 +459,230 @@ def server(input, output, session):
     @render.ui
     def interpretacion_estres():
 
-        variable = input.tipo_estres()
-        tipo = input.tipo_grafico()
-
         datos = datos_estres()
-
-        nombres = {
-            "AcademicStress": "estrés académico",
-            "FinancialStress": "estrés financiero"
-        }
-
-        nombre = nombres[variable]
+        tipo = input.tipo_grafico()
         n = len(datos)
 
         if n < 3:
             return ui.p(
-                "Selecciona al menos 3 observaciones "
-                "válidas para realizar el análisis."
+                "Se requieren al menos 3 observaciones "
+                "para realizar el análisis."
             )
 
-        promedio_gpa = datos["GPA"].mean()
-        mediana_gpa = datos["GPA"].median()
+        promedio = datos["GPA"].mean()
+        mediana = datos["GPA"].median()
 
-        # Calcular correlación de Pearson
-        if (
-            datos[variable].nunique() > 1
-            and datos["GPA"].nunique() > 1
-        ):
+        def analizar_correlacion(variable):
+
+            if (
+                datos[variable].nunique() < 2
+                or datos["GPA"].nunique() < 2
+            ):
+                return (
+                    "No es posible calcular la correlación "
+                    "con esta selección."
+                )
+
             r = datos[variable].corr(datos["GPA"])
-        else:
-            r = float("nan")
 
-        if pd.isna(r):
-            texto_correlacion = (
-                "No es posible calcular la correlación "
-                "con las observaciones seleccionadas."
-            )
-            valor_r = "No disponible"
+            if pd.isna(r):
+                return "Correlación no disponible."
 
-        else:
-            valor_r = f"{r:.3f}"
+            magnitud = abs(r)
 
-            # Intensidad de la asociación
-            if abs(r) < 0.20:
+            if magnitud < 0.20:
                 fuerza = "muy débil"
-            elif abs(r) < 0.40:
+            elif magnitud < 0.40:
                 fuerza = "débil"
-            elif abs(r) < 0.60:
+            elif magnitud < 0.60:
                 fuerza = "moderada"
-            elif abs(r) < 0.80:
+            elif magnitud < 0.80:
                 fuerza = "fuerte"
             else:
                 fuerza = "muy fuerte"
 
-            # Dirección
             if r > 0:
                 direccion = "positiva"
                 tendencia = (
-                    "los estudiantes con mayor nivel de estrés "
-                    "tienden a presentar un GPA más alto"
+                    "un GPA más alto"
                 )
             elif r < 0:
                 direccion = "negativa"
                 tendencia = (
-                    "los estudiantes con mayor nivel de estrés "
-                    "tienden a presentar un GPA más bajo"
+                    "un GPA más bajo"
                 )
             else:
                 direccion = "nula"
                 tendencia = (
-                    "no se observa una relación lineal"
+                    "ninguna tendencia lineal"
                 )
 
-            texto_correlacion = (
-                f"Se identifica una asociación lineal "
-                f"{direccion} de intensidad {fuerza} "
-                f"entre el {nombre} y el GPA. "
-                f"En la muestra analizada, {tendencia}."
+            return (
+                f"r = {r:.3f}. Se observa una asociación "
+                f"lineal {direccion} de intensidad {fuerza}. "
+                f"Los niveles más altos de estrés tienden "
+                f"a relacionarse con {tendencia}."
+                if r != 0 else
+                "r = 0.000. No se observa "
+                "una asociación lineal."
             )
 
-        # Interpretación según el tipo de gráfico
+        # ----------------------------------
+        # INTERPRETACIÓN DE DISPERSIÓN
+        # ----------------------------------
+
         if tipo == "dispersion":
 
-            texto_grafico = (
-                "El gráfico de dispersión permite observar "
-                "cómo se distribuyen las calificaciones "
-                "individuales según los niveles de estrés. "
-                "La correlación resume la tendencia lineal "
-                "entre ambas variables."
+            variable = input.tipo_estres()
+
+            nombre = (
+                "académico"
+                if variable == "AcademicStress"
+                else "financiero"
             )
+
+            return ui.div(
+
+                ui.h4("Resumen estadístico"),
+
+                ui.p(
+                    f"Estudiantes analizados: {n}"
+                ),
+
+                ui.p(
+                    f"GPA promedio: {promedio:.2f}"
+                ),
+
+                ui.p(
+                    f"Mediana del GPA: {mediana:.2f}"
+                ),
+
+                ui.hr(),
+
+                ui.h4(
+                    f"Interpretación del estrés {nombre}"
+                ),
+
+                ui.p(analizar_correlacion(variable)),
+
+                ui.p(
+                    "El gráfico permite observar la "
+                    "distribución individual de las "
+                    "calificaciones según el nivel de estrés."
+                )
+            )
+
+        # ----------------------------------
+        # INTERPRETACIÓN DE CAJAS
+        # ----------------------------------
 
         else:
 
-            texto_grafico = (
-                "El diagrama de cajas permite comparar "
-                "la distribución del GPA en cada nivel "
-                "de estrés. La línea central de cada caja "
-                "representa la mediana, mientras que la "
-                "caja representa el rango intercuartílico. "
-                "Los puntos externos indican posibles "
-                "valores atípicos."
+            # Resumen de medianas por intervalos
+            etiquetas = [
+                "Hasta 2",
+                "2 a 4",
+                "4 a 6",
+                "6 a 8",
+                "Más de 8"
+            ]
+
+            def resumen_cajas(variable):
+
+                grupos = pd.cut(
+                    datos[variable],
+                    bins=[
+                        float("-inf"),
+                        2, 4, 6, 8,
+                        float("inf")
+                    ],
+                    labels=etiquetas
+                )
+
+                resumen = (
+                    datos.assign(GrupoEstres=grupos)
+                    .groupby(
+                        "GrupoEstres",
+                        observed=True
+                    )["GPA"]
+                    .agg(["median", "count"])
+                )
+
+                partes = []
+
+                for grupo, fila in resumen.iterrows():
+                    partes.append(
+                        f"{grupo}: mediana {fila['median']:.2f} "
+                        f"(n={int(fila['count'])})"
+                    )
+
+                return "; ".join(partes)
+
+            return ui.div(
+
+                ui.h4("Resumen estadístico general"),
+
+                ui.p(
+                    f"Estudiantes analizados: {n}"
+                ),
+
+                ui.p(
+                    f"GPA promedio: {promedio:.2f}"
+                ),
+
+                ui.p(
+                    f"Mediana del GPA: {mediana:.2f}"
+                ),
+
+                ui.hr(),
+
+                ui.h4("1. Estrés Académico"),
+
+                ui.p(
+                    analizar_correlacion("AcademicStress")
+                ),
+
+                ui.p(
+                    "Medianas del GPA por nivel de "
+                    "estrés académico: "
+                    + resumen_cajas("AcademicStress")
+                ),
+
+                ui.hr(),
+
+                ui.h4("2. Estrés Financiero"),
+
+                ui.p(
+                    analizar_correlacion("FinancialStress")
+                ),
+
+                ui.p(
+                    "Medianas del GPA por nivel de "
+                    "estrés financiero: "
+                    + resumen_cajas("FinancialStress")
+                ),
+
+                ui.hr(),
+
+                ui.h4("3. Comparación general"),
+
+                ui.p(
+                    "Los diagramas de cajas permiten "
+                    "comparar la distribución del GPA "
+                    "en los distintos niveles de ambos "
+                    "tipos de estrés. Las medianas y "
+                    "la dispersión ayudan a identificar "
+                    "posibles diferencias entre grupos."
+                ),
+
+                ui.p(
+                    "Las correlaciones de Pearson "
+                    "describen la asociación lineal "
+                    "de cada tipo de estrés con el GPA. "
+                    "No representan una relación causal."
+                )
             )
 
-        return ui.div(
-
-            ui.h4("Resumen de los datos"),
-
-            ui.p(
-                ui.strong("Observaciones analizadas: "),
-                str(n)
-            ),
-
-            ui.p(
-                ui.strong("GPA promedio: "),
-                f"{promedio_gpa:.2f}"
-            ),
-
-            ui.p(
-                ui.strong("Mediana del GPA: "),
-                f"{mediana_gpa:.2f}"
-            ),
-
-            ui.p(
-                ui.strong("Correlación de Pearson: "),
-                valor_r
-            ),
-
-            ui.hr(),
-
-            ui.h4("Interpretación del gráfico"),
-
-            ui.p(texto_grafico),
-
-            ui.h4("Interpretación estadística"),
-
-            ui.p(texto_correlacion),
-
-            ui.hr(),
-
-            ui.p(
-                "Nota: Los resultados corresponden a una "
-                "muestra aleatoria reproducible de los datos "
-                "válidos. Las asociaciones no implican "
-                "relaciones de causa y efecto."
-            )
-        )
 
 
 # ==========================================
