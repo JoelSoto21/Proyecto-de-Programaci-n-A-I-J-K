@@ -4,6 +4,8 @@ import pandas as pd
 from shinywidgets import output_widget, render_widget
 import pathlib
 
+#Prueba Ianna 
+
 # Carga de la base de datos desde la raíz del proyecto
 csv_path = pathlib.Path(__file__).parent.parent / "data.csv"
 if not csv_path.exists():
