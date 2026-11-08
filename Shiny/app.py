@@ -4,8 +4,6 @@ import pandas as pd
 from shinywidgets import output_widget, render_widget
 import pathlib
 
-# Prueba Ianna
-
 # ==========================================
 # CARGA DE LA BASE DE DATOS
 # ==========================================
@@ -52,19 +50,51 @@ app_ui = ui.page_fluid(
 
             ui.hr(),
 
-            # Plantilla inicial
-            ui.h4("Prueba de la plantilla inicial"),
+            # ==================================
+            # DATOS TABULARES
+            # ==================================
 
-            ui.input_slider(
-                "numero",
-                "Selecciona un número",
-                0,
-                100,
-                50
+            ui.h4("Exploración de la base de datos"),
+
+            ui.p(
+            "En esta sección se pueden consultar los registros "
+            "de la base de datos mediante herramientas de búsqueda, "
+            "filtrado y paginación."
             ),
 
-            ui.output_text("resultado")
-        ),
+        ui.layout_columns(
+            ui.input_text(
+                "buscar",
+                "Buscar registros:",
+            placeholder="Escriba un valor para buscar"
+         ),
+
+        ui.input_select(
+            "columna",
+            "Buscar en la variable:",
+            choices=["Todas"] + list(df.columns)
+         ),
+
+        ui.input_select(
+            "cantidad",
+            "Registros por página:",
+            choices=["10", "25", "50", "100"],
+            selected="10"
+         )
+    ),
+
+ui.hr(),
+
+ui.output_text("total_registros"),
+
+ui.output_data_frame("tabla"),
+
+ui.layout_columns(
+    ui.input_action_button("anterior", "Anterior"),
+    ui.output_text("pagina_actual"),
+    ui.input_action_button("siguiente", "Siguiente")
+  )
+),
 
         # ==================================
         # PESTAÑA 2: SUEÑO Y SALUD MENTAL
@@ -217,10 +247,94 @@ def server(input, output, session):
     # --------------------------------------
     # PESTAÑA 1: PRUEBA DEL SLIDER
     # --------------------------------------
+# Variable para controlar la página actual
+    pagina = reactive.value(1)
 
+    # Filtrar los datos según la búsqueda
+    @reactive.calc
+    def datos_filtrados():
+
+        datos = df.copy()
+        busqueda = input.buscar().strip()
+
+        if busqueda:
+
+            if input.columna() == "Todas":
+                mascara = datos.astype(str).apply(
+                    lambda col: col.str.contains(
+                        busqueda,
+                        case=False,
+                        na=False,
+                        regex=False
+                    )
+                ).any(axis=1)
+
+            else:
+                mascara = datos[input.columna()].astype(str).str.contains(
+                    busqueda,
+                    case=False,
+                    na=False,
+                    regex=False
+                )
+
+            datos = datos[mascara]
+
+        return datos
+
+    # Calcular el número total de páginas
+    @reactive.calc
+    def numero_paginas():
+
+        cantidad = int(input.cantidad())
+        total = len(datos_filtrados())
+
+        return max(1, (total + cantidad - 1) // cantidad)
+
+    # Reiniciar página al modificar la búsqueda
+    @reactive.effect
+    @reactive.event(input.buscar, input.columna, input.cantidad)
+    def reiniciar_pagina():
+        pagina.set(1)
+
+    # Avanzar de página
+    @reactive.effect
+    @reactive.event(input.siguiente)
+    def avanzar():
+        pagina.set(min(pagina() + 1, numero_paginas()))
+
+    # Retroceder de página
+    @reactive.effect
+    @reactive.event(input.anterior)
+    def retroceder():
+        pagina.set(max(1, pagina() - 1))
+
+    # Mostrar cantidad de registros encontrados
     @render.text
-    def resultado():
-        return f"El número seleccionado es: {input.numero()}"
+    def total_registros():
+        return f"Registros encontrados: {len(datos_filtrados())}"
+
+    # Mostrar número de página actual
+    @render.text
+    def pagina_actual():
+        return f"Página {min(pagina(), numero_paginas())} de {numero_paginas()}"
+
+    # Mostrar tabla interactiva
+    @render.data_frame
+    def tabla():
+
+        datos = datos_filtrados()
+        cantidad = int(input.cantidad())
+        actual = min(pagina(), numero_paginas())
+
+        inicio = (actual - 1) * cantidad
+        fin = inicio + cantidad
+
+        return render.DataGrid(
+            datos.iloc[inicio:fin].reset_index(drop=True),
+            filters=True,
+            width="100%",
+            height="450px"
+        )
 
     # --------------------------------------
     # PESTAÑA 2: GRÁFICO DE SUEÑO Y SALUD MENTAL
