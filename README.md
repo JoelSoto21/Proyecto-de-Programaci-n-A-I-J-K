@@ -47,7 +47,6 @@ El proyecto se centrará en tres áreas principales:
 ## Variables principales 
 | Variable | Descripción |
 |---|---|
-| `` | Descripcion |
 | `PHQ-9` | Nivel de depresión (0-27) – Cuestionario de salud del paciente |
 | `GAD-7` | Nivel de ansiedad (0-21) - Escala de Trastorno de Ansiedad Generalizada |
 | `SleepHours` | Duración media diaria del sueño (3-10 horas) |
