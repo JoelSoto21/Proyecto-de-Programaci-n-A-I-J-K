@@ -44,6 +44,26 @@ El proyecto se centrará en tres áreas principales:
 
 3. **Entorno social y bienestar:** Relación entre el apoyo familiar, la actividad social y los indicadores de salud mental.
 
+## Variables principales 
+| Variable | Descripción |
+|---|---|
+| `` | Descripcion |
+| `PHQ-9` | Nivel de depresión (0-27) – Cuestionario de salud del paciente |
+| `GAD-7` | Nivel de ansiedad (0-21) - Escala de Trastorno de Ansiedad Generalizada |
+| `SleepHours` | Duración media diaria del sueño (3-10 horas) |
+| `ExerciseFreq` | Frecuencia de ejercicio físico (0-7 días/semana) |
+| `SocialActivity` | Frecuencia de ejercicio físico (0-7 días/semana) |
+| `OnlineStress` | Estrés percibido por el aprendizaje en línea (0-10) |
+| `GPA` | Rendimiento académico (0-4.0) |
+| `FamilySupport` | Apoyo emocional/financiero familiar (0-1) |
+| `ScreenTime` | Promedio de exposición a pantallas (1-12 horas/día) |
+| `AcademicStress` | Presión por la carga de trabajo académico (0-10) |
+| `DietQuality` | Puntuación de nutrición y dieta equilibrada (1-10) |
+| `SelfEfficacy` | Confidence in coping with challenges (0-10) |
+| `PeerRelationship` | Relación con compañeros de clase (0-10) |
+| `FinancialStress` | Intensidad de la carga financiera (0-10) |
+| `SleepQuality` | Satisfacción subjetiva con el sueño (0-10) |
+| `MentalHealthStatus` | El estado de salud mental se determina mediante: P(Healthy) = 1 / (1 + e^(-Z/10)) |
 ## Tecnologías
 
 - **Python:** Procesamiento y análisis de datos.
