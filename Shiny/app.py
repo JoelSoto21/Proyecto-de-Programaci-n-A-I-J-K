@@ -2,252 +2,255 @@ from shiny import App, ui, render, reactive
 import plotly.express as px
 import pandas as pd
 from shinywidgets import output_widget, render_widget
-import pathlib
+from pathlib import Path
 
 # ==========================================
-# CARGA DE LA BASE DE DATOS
+# CARGA DE DATOS
 # ==========================================
-
-# Carga de la base de datos desde la raíz del proyecto
-csv_path = pathlib.Path(__file__).parent.parent / "data.csv"
-
-if not csv_path.exists():
-    csv_path = "data.csv"
-
-df = pd.read_csv(csv_path)
-
+BASE = Path(__file__).resolve().parent
+CSV = BASE.parent / "data.csv"
+if not CSV.exists():
+    CSV = BASE / "data.csv"
+if not CSV.exists():
+    raise FileNotFoundError("No se encontró data.csv en la raíz del proyecto ni en Shiny/.")
+df = pd.read_csv(CSV)
 
 # ==========================================
-# 1. INTERFAZ DE USUARIO (UI)
+# COMPONENTES DE DISEÑO
 # ==========================================
+def encabezado(titulo, descripcion, etiqueta=None):
+    return ui.tags.div(
+        ui.tags.span(etiqueta, class_="eyebrow") if etiqueta else None,
+        ui.h2(titulo),
+        ui.p(descripcion),
+        class_="section-heading"
+    )
 
+
+def indicador(etiqueta, id_salida):
+    """Tarjeta estadística sin íconos, con un valor reactivo."""
+    return ui.tags.div(
+        ui.tags.span(etiqueta, class_="metric-label"),
+        ui.tags.div(ui.output_text(id_salida), class_="metric-value"),
+        class_="metric-card"
+    )
+
+
+# ==========================================
+# INTERFAZ: CINCO PESTAÑAS
+# ==========================================
 app_ui = ui.page_fluid(
-    ui.h2("Tablero de Indicadores de Salud Mental en Estudiantes"),
-    ui.hr(),
-
-    # Navegación principal con 4 pestañas
+    ui.include_css(BASE / "estilos.css"),
+    ui.tags.div(
+        ui.h1("Salud mental en estudiantes universitarios", class_="titulo-principal"),
+        ui.p(
+            "Exploración interactiva de indicadores de bienestar, hábitos y vida académica.",
+            class_="subtitulo-principal"
+        ),
+        class_="hero-simple"
+    ),
     ui.navset_tab(
-
-        # ==================================
+        # ----------------------------------
         # PESTAÑA 1: INICIO
-        # ==================================
+        # ----------------------------------
         ui.nav_panel(
             "Inicio",
-
-            ui.h3("Bienvenido al proyecto"),
-
-            ui.p(
-                "Esta aplicación tiene como propósito explorar "
-                "los factores académicos, conductuales y "
-                "psicosociales relacionados con la salud mental "
-                "de los estudiantes universitarios."
+            encabezado(
+                "Explora el bienestar estudiantil",
+                "Un espacio para descubrir patrones en la salud mental universitaria mediante visualizaciones y datos.",
+                "PRESENTACIÓN"
             ),
-
-            ui.p(
-                "Utiliza las pestañas superiores para explorar "
-                "los diferentes análisis estadísticos."
+            ui.layout_columns(
+                indicador("Estudiantes en el conjunto", "kpi_estudiantes"),
+                indicador("GPA promedio", "kpi_gpa"),
+                indicador("Horas de sueño promedio", "kpi_sueno"),
+                indicador("Estrés académico promedio", "kpi_estres"),
+                col_widths=(3, 3, 3, 3)
             ),
-
-            ui.hr(),
-
-            # ==================================
-            # DATOS TABULARES
-            # ==================================
-
-            ui.h4("Exploración de la base de datos"),
-
-            ui.p(
-            "En esta sección se pueden consultar los registros "
-            "de la base de datos mediante herramientas de búsqueda, "
-            "filtrado y paginación."
+            ui.tags.div(
+                ui.tags.div(
+                    ui.tags.span("NUESTRO PROPÓSITO", class_="eyebrow"),
+                    ui.h3("¿Qué buscamos comprender?"),
+                    ui.p(
+                        "El proyecto analiza asociaciones entre factores académicos, "
+                        "conductuales y psicosociales y el bienestar mental estudiantil. "
+                        "Permite explorar tendencias, comparar grupos y construir "
+                        "interpretaciones estadísticas sin asumir relaciones causales."
+                    ),
+                    class_="intro-copy"
+                ),
+                ui.tags.div(
+                    ui.tags.div(ui.tags.span("01", class_="step-number"), ui.tags.strong("Sueño y salud mental"), ui.p("Horas de descanso, calidad del sueño, ansiedad y depresión."), class_="topic-row"),
+                    ui.tags.div(ui.tags.span("02", class_="step-number"), ui.tags.strong("Estrés y rendimiento"), ui.p("Estrés académico y financiero en relación con el GPA."), class_="topic-row"),
+                    ui.tags.div(ui.tags.span("03", class_="step-number"), ui.tags.strong("Apoyo social y familiar"), ui.p("Exploración de los factores psicosociales y del bienestar."), class_="topic-row"),
+                    class_="topics"
+                ),
+                class_="intro-panel"
+            )
+        ),
+        # ----------------------------------
+        # PESTAÑA 2: BASE DE DATOS
+        # ----------------------------------
+        ui.nav_panel(
+            "Base de datos",
+            encabezado(
+                "Exploración de la base de datos",
+                "Consultá registros con búsqueda por variable, filtros y paginación.",
+                "DATOS"
             ),
-
-        ui.layout_columns(
-            ui.input_text(
-                "buscar",
-                "Buscar registros:",
-            placeholder="Escriba un valor para buscar"
-         ),
-
-        ui.input_select(
-            "columna",
-            "Buscar en la variable:",
-            choices=["Todas"] + list(df.columns)
-         ),
-
-        ui.input_select(
-            "cantidad",
-            "Registros por página:",
-            choices=["10", "25", "50", "100"],
-            selected="10"
-         )
-    ),
-
-ui.hr(),
-
-ui.output_text("total_registros"),
-
-ui.output_data_frame("tabla"),
-
-ui.layout_columns(
-    ui.input_action_button("anterior", "Anterior"),
-    ui.output_text("pagina_actual"),
-    ui.input_action_button("siguiente", "Siguiente")
-  )
-),
-
-        # ==================================
-        # PESTAÑA 2: SUEÑO Y SALUD MENTAL
-        # ==================================
+            ui.tags.div(
+                ui.layout_columns(
+                    ui.input_text("buscar", "Buscar registros", placeholder="Escribí un valor para buscar"),
+                    ui.input_select("columna", "Buscar en la variable", choices=["Todas"] + list(df.columns)),
+                    ui.input_select("cantidad", "Registros por página", choices=["10", "25", "50", "100"], selected="10"),
+                    col_widths=(4, 5, 3)
+                ),
+                class_="filter-card"
+            ),
+            ui.tags.div(
+                ui.tags.div(ui.tags.strong("Registros disponibles"), ui.tags.span(ui.output_text("total_registros"), class_="result-counter"), class_="table-heading"),
+                ui.tags.div(ui.output_data_frame("tabla"), class_="table-scroll"),
+                ui.tags.div(
+                    ui.input_action_button("anterior", "← Anterior", class_="pagination-btn"),
+                    ui.tags.span(ui.output_text("pagina_actual"), class_="page-label"),
+                    ui.input_action_button("siguiente", "Siguiente →", class_="pagination-btn"),
+                    class_="pagination-row"
+                ),
+                class_="table-card"
+            )
+        ),
+        # ----------------------------------
+        # PESTAÑA 3: SUEÑO Y SALUD MENTAL
+        # ----------------------------------
         ui.nav_panel(
             "Sueño y Salud Mental",
-
-            ui.h3("Análisis de Sueño, Ansiedad y Depresión"),
-
-            ui.p(
-                "En esta sección se explora la relación entre "
-                "la duración y calidad del sueño y los niveles "
-                "de ansiedad y depresión de los estudiantes."
+            encabezado(
+                "Sueño, ansiedad y depresión",
+                "Explorá cómo se relacionan la duración y calidad del sueño con los indicadores de ansiedad y depresión.",
+                "ANÁLISIS 01"
             ),
-
             ui.layout_sidebar(
                 ui.sidebar(
-                    ui.h4("Filtros del Gráfico"),
-
+                    ui.h4("Personalizar gráfico"),
                     ui.input_select(
-                        id="metrica_salud",
-                        label="Selecciona el indicador psicológico (Eje Y):",
-                        choices={
-                            "GAD7": "Ansiedad (GAD-7)",
-                            "PHQ9": "Depresión (PHQ-9)"
-                        }
+                        "metrica_salud", "Indicador psicológico (eje Y)",
+                        choices={"GAD7": "Ansiedad (GAD-7)", "PHQ9": "Depresión (PHQ-9)"}
                     ),
-
                     ui.input_select(
-                        id="metrica_sueno",
-                        label="Selecciona el indicador de sueño (Eje X):",
-                        choices={
-                            "SleepHours": "Horas de Sueño",
-                            "SleepQuality": "Calidad del Sueño"
-                        }
+                        "metrica_sueno", "Indicador de sueño (eje X)",
+                        choices={"SleepHours": "Horas de Sueño", "SleepQuality": "Calidad del Sueño"}
                     )
                 ),
-
-                ui.card(
-                    ui.card_header("Gráfico de Dispersión"),
-                    output_widget("plot_sueno_ansiedad")
-                )
+                ui.card(ui.card_header("Relación entre sueño y salud mental"), output_widget("plot_sueno_ansiedad"))
             )
         ),
-
-        # ==================================
-        # PESTAÑA 3: ESTRÉS Y RENDIMIENTO
-        # ==================================
+        # ----------------------------------
+        # PESTAÑA 4: ESTRÉS Y RENDIMIENTO
+        # ----------------------------------
         ui.nav_panel(
             "Estrés y Rendimiento",
-
-            ui.h3("Análisis de Estrés y Rendimiento Académico"),
-
-            ui.p(
-                "Explora la relación entre el estrés académico, "
-                "el estrés financiero y el promedio de "
-                "calificaciones (GPA) de los estudiantes."
+            encabezado(
+                "Estrés y rendimiento académico",
+                "Compará el estrés académico y financiero con el promedio de calificaciones (GPA).",
+                "ANÁLISIS 02"
             ),
-
             ui.layout_sidebar(
                 ui.sidebar(
-                    ui.h4("Filtros del Gráfico"),
-
+                    ui.h4("Personalizar gráfico"),
                     ui.input_select(
-                        "tipo_grafico",
-                        "Selecciona el tipo de gráfico:",
-                        choices={
-                            "dispersion": "Gráfico de Dispersión",
-                            "cajas": "Diagrama de Cajas"
-                        }
+                        "tipo_grafico", "Tipo de gráfico",
+                        choices={"dispersion": "Gráfico de dispersión", "cajas": "Diagramas de cajas"}
                     ),
-
-                    # Solo se muestra para el gráfico de dispersión
                     ui.panel_conditional(
                         "input.tipo_grafico === 'dispersion'",
-
                         ui.input_select(
-                            "tipo_estres",
-                            "Selecciona el tipo de estrés:",
-                            choices={
-                                "AcademicStress": "Estrés Académico",
-                                "FinancialStress": "Estrés Financiero"
-                            }
+                            "tipo_estres", "Tipo de estrés",
+                            choices={"AcademicStress": "Estrés académico", "FinancialStress": "Estrés financiero"}
                         )
                     ),
-
                     ui.hr(),
-
-                    ui.input_slider(
-                        "n_observaciones",
-                        "Número de observaciones:",
-                        min=1,
-                        max=len(df),
-                        value=min(300, len(df)),
-                        step=1
-                    ),
-
-                    ui.p(f"Total de registros: {len(df)}")
+                    ui.input_slider("n_observaciones", "Número de observaciones", min=1, max=max(1, len(df)), value=min(300, max(1, len(df))), step=1),
+                    ui.p(f"Registros totales: {len(df)}", class_="sidebar-note")
                 ),
-
                 ui.card(
-                    ui.card_header("Relación entre el Estrés y el GPA"),
+                    ui.card_header("Relación entre estrés y GPA"),
                     output_widget("plot_estres_gpa"),
-                    ui.output_text("resumen_observaciones")
+                    ui.tags.div(ui.output_text("resumen_observaciones"), class_="figure-footer")
                 )
             ),
-
-            ui.hr(),
-
-            # Interpretación debajo del gráfico
-            ui.card(
-                ui.card_header("Interpretación Estadística"),
-                ui.output_ui("interpretacion_estres")
+            ui.tags.div(
+                ui.card(ui.card_header("Interpretación estadística"), ui.output_ui("interpretacion_estres")),
+                class_="analysis-card"
             )
         ),
-
-        # ==================================
-        # PESTAÑA 4: APOYO SOCIAL Y FAMILIAR
-        # ==================================
+        # ----------------------------------
+        # PESTAÑA 5: APOYO SOCIAL Y FAMILIAR
+        # ----------------------------------
         ui.nav_panel(
             "Apoyo Social y Familiar",
-
-            ui.h3("Análisis de Factores Psicosociales"),
-
-            ui.p(
-                "Esta sección estará destinada a examinar "
-                "la relación entre el apoyo familiar, "
-                "la actividad social y el estado de "
-                "salud mental de los estudiantes."
+            encabezado(
+                "Apoyo social y familiar",
+                "Esta sección estudiará cómo se relacionan el entorno familiar y la actividad social con los indicadores de bienestar.",
+                "ANÁLISIS 03"
             ),
-
-            ui.card(
-                ui.card_header("Visualizaciones estadísticas"),
-                ui.p("Gráficos en desarrollo.")
+            ui.tags.div(
+                ui.tags.div("♡", class_="empty-icon"),
+                ui.h3("Próximamente"),
+                ui.p("Aquí se incorporarán las visualizaciones de apoyo familiar, actividad social y salud mental."),
+                class_="empty-panel"
             )
         ),
-
         id="pestanas",
         selected="Inicio"
+    ),
+    ui.tags.footer(
+        ui.tags.img(
+            src="/footer.png",
+            alt="Salud mental universitaria",
+            class_="footer-imagen"
+        ),
+        ui.tags.p(
+            "Proyecto académico · Análisis exploratorio · Los resultados no sustituyen una evaluación clínica.",
+            class_="footer-nota"
+        ),
+        class_="app-footer"
     )
 )
 
 
 # ==========================================
-# 2. SERVIDOR (LÓGICA)
+# SERVIDOR: SE CONSERVA LA LÓGICA EXISTENTE
 # ==========================================
-
 def server(input, output, session):
 
     # --------------------------------------
-    # PESTAÑA 1: PRUEBA DEL SLIDER
+    # INDICADORES DE LA PÁGINA INICIO
     # --------------------------------------
-# Variable para controlar la página actual
+
+    @render.text
+    def kpi_estudiantes():
+        return f"{len(df):,}".replace(",", ".")
+
+    @render.text
+    def kpi_gpa():
+        valores = pd.to_numeric(df["GPA"], errors="coerce")
+        return f"{valores.mean():.2f}" if valores.notna().any() else "Sin datos"
+
+    @render.text
+    def kpi_sueno():
+        valores = pd.to_numeric(df["SleepHours"], errors="coerce")
+        return f"{valores.mean():.1f} h" if valores.notna().any() else "Sin datos"
+
+    @render.text
+    def kpi_estres():
+        valores = pd.to_numeric(df["AcademicStress"], errors="coerce")
+        return f"{valores.mean():.1f}" if valores.notna().any() else "Sin datos"
+
+
+    # --------------------------------------
+    # PESTAÑA 2: EXPLORACIÓN DE LA BASE DE DATOS
+    # --------------------------------------
+    # Variable para controlar la página actual
     pagina = reactive.value(1)
 
     # Filtrar los datos según la búsqueda
@@ -337,7 +340,7 @@ def server(input, output, session):
         )
 
     # --------------------------------------
-    # PESTAÑA 2: GRÁFICO DE SUEÑO Y SALUD MENTAL
+    # PESTAÑA 3: GRÁFICO DE SUEÑO Y SALUD MENTAL
     # --------------------------------------
 
     @render_widget
@@ -387,12 +390,12 @@ def server(input, output, session):
     
    
     # ==========================================
-    # PESTAÑA 3: ESTRÉS Y RENDIMIENTO
+    # PESTAÑA 4: ESTRÉS Y RENDIMIENTO
     # ==========================================
 
     
     # ==========================================
-    # PESTAÑA 3: ESTRÉS Y RENDIMIENTO
+    # PESTAÑA 4: ESTRÉS Y RENDIMIENTO
     # ==========================================
 
     @reactive.calc
@@ -803,4 +806,8 @@ def server(input, output, session):
 # 3. CREACIÓN DE LA APLICACIÓN
 # ==========================================
 
-app = App(app_ui, server)
+app = App(
+    app_ui,
+    server,
+    static_assets=BASE / "www"
+)
