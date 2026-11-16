@@ -91,26 +91,29 @@ app_ui = ui.page_fluid(
         # ----------------------------------
         # PESTAÑA 2: BASE DE DATOS
         # ----------------------------------
-        ui.nav_panel(
-            "Base de datos",
+        ui.nav_panel(  #ui.nav_panel() Permite crear una pestaña de navegacion dentro de la aplicacion 
+            "Base de datos", #Aca se nombra la pestaña de navegacion
             encabezado(
                 "Exploración de la base de datos",
                 "Consultá registros con búsqueda por variable, filtros y paginación.",
                 "DATOS"
             ),
-            ui.tags.div(
-                ui.layout_columns(
-                    ui.input_text("buscar", "Buscar registros", placeholder="Escribí un valor para buscar"),
-                    ui.input_select("columna", "Buscar en la variable", choices=["Todas"] + list(df.columns)),
+            #Creacion de los buscadores y filtros de la base de datos
+            #Este bloque se encarga de construir los controles con los que el usuario interactúa.
+
+            ui.tags.div( #ui.tags.div() es una funcion que permite crear un contenedor de elementos HTML dentro de la applicacion
+                ui.layout_columns( # ui.layout_columns() organiza los elemntos en columnas
+                    ui.input_text("buscar", "Buscar registros", placeholder="Escribí un valor para buscar"), #ui.input_text() crea un cuadro de texto para que el usuario ingrese su busqueda
+                    ui.input_select("columna", "Buscar en la variable", choices=["Todas"] + list(df.columns)), #ui.input_select() crea un menu despegable para que el usuario seleccione la variable que desea buscar
                     ui.input_select("cantidad", "Registros por página", choices=["10", "25", "50", "100"], selected="10"),
                     col_widths=(4, 5, 3)
                 ),
                 class_="filter-card"
             ),
             ui.tags.div(
-                ui.tags.div(ui.tags.strong("Registros disponibles"), ui.tags.span(ui.output_text("total_registros"), class_="result-counter"), class_="table-heading"),
-                ui.tags.div(ui.output_data_frame("tabla"), class_="table-scroll"),
-                ui.tags.div(
+                ui.tags.div(ui.tags.strong("Registros disponibles"), ui.tags.span(ui.output_text("total_registros"), class_="result-counter"), class_="table-heading"), #Esta linea crea un contenedor que muestra el total de registros disponibles en la base de datos
+                ui.tags.div(ui.output_data_frame("tabla"), class_="table-scroll"), #Creacion de la tabla interactiva que muestra los datos filtrados
+                ui.tags.div( #Aca se crean los botones de paginacion para navegar entre paginas de la tabla
                     ui.input_action_button("anterior", "← Anterior", class_="pagination-btn"),
                     ui.tags.span(ui.output_text("pagina_actual"), class_="page-label"),
                     ui.input_action_button("siguiente", "Siguiente →", class_="pagination-btn"),
@@ -118,13 +121,12 @@ app_ui = ui.page_fluid(
                 ),
                 class_="table-card"
             ), 
-            #Prueba descripcion de las variables 
 
             # ----------------------------------
             # DESCRIPCIÓN DE LAS VARIABLES
             # ----------------------------------
 
-            ui.hr(),
+            ui.hr(), #Crea una linea horizontal que separa la tabla de la descripccion de las variables
 
             encabezado(
                 "Descripción de las variables",
@@ -133,25 +135,25 @@ app_ui = ui.page_fluid(
                 "VARIABLES"
             ),
 
-            ui.tags.div(
-                ui.tags.table(
+            ui.tags.div( #Esta funcion crea un contenedor que contiene una tabla con la descripcion de las variables
+                ui.tags.table( #Crea la tabla HTML que contiene la descripcion de las variables 
                     {"class": "table table-striped table-bordered table-hover"},
 
-                    ui.tags.thead(
-                        ui.tags.tr(
+                    ui.tags.thead( #Permite contruir el encabezado de la tabla
+                        ui.tags.tr( #Permite crear una fila dentro de la tabla
                             ui.tags.th("Variable"),
                             ui.tags.th("Descripción")
                         )
                     ),
 
-                    ui.tags.tbody(
+                    ui.tags.tbody( 
                         *[
                             ui.tags.tr(
                                 ui.tags.td(ui.tags.code(variable)),
                                 ui.tags.td(descripcion)
                             )
 
-                            for variable, descripcion in [
+                            for variable, descripcion in [ #En esta parte se definen las variables y sus descripcciones que se mostraran en la tabla
 
                                 ("PHQ-9",
                                  "Nivel de depresión (0-27) – Cuestionario de salud del paciente"),
@@ -209,7 +211,7 @@ app_ui = ui.page_fluid(
                 class_="table-card"
             )
 
-        ),  # Cierre de la pestaña 2: Base de datos
+        ),  
             
 
         # ----------------------------------
@@ -343,6 +345,7 @@ def server(input, output, session):
     # --------------------------------------
     # PESTAÑA 2: EXPLORACIÓN DE LA BASE DE DATOS
     # --------------------------------------
+    #Toda la siguiente parte se encofa en recibir la informacion del usuario y de ahi limpiarla, analizarla y mostrarla en la tabla interactiva
     # Variable para controlar la página actual
     pagina = reactive.value(1)
 
@@ -351,12 +354,12 @@ def server(input, output, session):
     def datos_filtrados():
 
         datos = df.copy()
-        busqueda = input.buscar().strip()
+        busqueda = input.buscar().strip()  #Recupera el texto que el usuario escribió en el buscador que creamos anteriormente en la interfaz, a demas con strip() se eliminan espacios en blanco 
 
         if busqueda:
 
             if input.columna() == "Todas":
-                mascara = datos.astype(str).apply(
+                mascara = datos.astype(str).apply( 
                     lambda col: col.str.contains(
                         busqueda,
                         case=False,
