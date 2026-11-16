@@ -117,8 +117,101 @@ app_ui = ui.page_fluid(
                     class_="pagination-row"
                 ),
                 class_="table-card"
+            ), 
+            #Prueba descripcion de las variables 
+
+            # ----------------------------------
+            # DESCRIPCIÓN DE LAS VARIABLES
+            # ----------------------------------
+
+            ui.hr(),
+
+            encabezado(
+                "Descripción de las variables",
+                "Conocé el significado y la escala de medición "
+                "de las variables presentes en la base de datos.",
+                "VARIABLES"
+            ),
+
+            ui.tags.div(
+                ui.tags.table(
+                    {"class": "table table-striped table-bordered table-hover"},
+
+                    ui.tags.thead(
+                        ui.tags.tr(
+                            ui.tags.th("Variable"),
+                            ui.tags.th("Descripción")
+                        )
+                    ),
+
+                    ui.tags.tbody(
+                        *[
+                            ui.tags.tr(
+                                ui.tags.td(ui.tags.code(variable)),
+                                ui.tags.td(descripcion)
+                            )
+
+                            for variable, descripcion in [
+
+                                ("PHQ-9",
+                                 "Nivel de depresión (0-27) – Cuestionario de salud del paciente"),
+
+                                ("GAD-7",
+                                 "Nivel de ansiedad (0-21) – Escala de Trastorno de Ansiedad Generalizada"),
+
+                                ("SleepHours",
+                                 "Duración media diaria del sueño (3-10 horas)"),
+
+                                ("ExerciseFreq",
+                                 "Frecuencia de ejercicio físico (0-7 días/semana)"),
+
+                                ("SocialActivity",
+                                 "Frecuencia de actividades sociales"),
+
+                                ("OnlineStress",
+                                 "Estrés percibido por el aprendizaje en línea (0-10)"),
+
+                                ("GPA",
+                                 "Rendimiento académico (0-4.0)"),
+
+                                ("FamilySupport",
+                                 "Apoyo emocional y financiero familiar (0-1)"),
+
+                                ("ScreenTime",
+                                 "Promedio de exposición a pantallas (1-12 horas/día)"),
+
+                                ("AcademicStress",
+                                 "Presión por la carga de trabajo académico (0-10)"),
+
+                                ("DietQuality",
+                                 "Puntuación de nutrición y dieta equilibrada (1-10)"),
+
+                                ("SelfEfficacy",
+                                 "Confianza para afrontar desafíos (0-10)"),
+
+                                ("PeerRelationship",
+                                 "Relación con compañeros de clase (0-10)"),
+
+                                ("FinancialStress",
+                                 "Intensidad de la carga financiera (0-10)"),
+
+                                ("SleepQuality",
+                                 "Satisfacción subjetiva con el sueño (0-10)"),
+
+                                ("MentalHealthStatus",
+                                 "El estado de salud mental se determina mediante: "
+                                 "P(Healthy) = 1 / (1 + e^(-Z/10))")
+                            ]
+                        ]
+                    )
+                ),
+
+                class_="table-card"
             )
-        ),
+
+        ),  # Cierre de la pestaña 2: Base de datos
+            
+
         # ----------------------------------
         # PESTAÑA 3: SUEÑO Y SALUD MENTAL
         # ----------------------------------
