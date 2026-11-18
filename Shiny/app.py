@@ -285,14 +285,55 @@ app_ui = ui.page_fluid(
             "Apoyo Social y Familiar",
             encabezado(
                 "Apoyo social y familiar",
-                "Esta sección estudiará cómo se relacionan el entorno familiar y la actividad social con los indicadores de bienestar.",
+                "Explorá cómo se relacionan el apoyo familiar, la actividad social y las relaciones con compañeros con el estado de salud mental.",
                 "ANÁLISIS 03"
             ),
+            ui.layout_sidebar(
+                ui.sidebar(
+                    ui.h4("Personalizar gráfico"),
+                    ui.input_select(
+                        "variable_social", "Factor social",
+                        choices={
+                            "FamilySupport": "Apoyo familiar",
+                            "SocialActivity": "Actividad social",
+                            "PeerRelationship": "Relación con compañeros"
+                        }
+                    ),
+                    ui.input_select(
+                        "tipo_grafico_social", "Tipo de gráfico",
+                        choices={
+                            "barras": "Barras: % de estudiantes saludables",
+                            "cajas": "Cajas: indicador psicológico"
+                        }
+                    ),
+                    ui.panel_conditional(
+                        "input.tipo_grafico_social === 'cajas'",
+                        ui.input_select(
+                            "indicador_social", "Indicador psicológico",
+                            choices={"PHQ9": "Depresión (PHQ-9)", "GAD7": "Ansiedad (GAD-7)"}
+                        )
+                    ),
+                    ui.input_slider(
+                        "n_grupos_social", "Número de grupos",
+                        min=3, max=6, value=4, step=1
+                    ),
+                    ui.p(
+                        "Los estudiantes se dividen en grupos del mismo tamaño según el factor elegido.",
+                        class_="sidebar-note"
+                    )
+                ),
+                ui.card(
+                    ui.card_header("Factores sociales y salud mental"),
+                    output_widget("plot_social"),
+                    ui.tags.div(ui.output_text("resumen_social"), class_="figure-footer")
+                )
+            ),
             ui.tags.div(
-                ui.tags.div("♡", class_="empty-icon"),
-                ui.h3("Próximamente"),
-                ui.p("Aquí se incorporarán las visualizaciones de apoyo familiar, actividad social y salud mental."),
-                class_="empty-panel"
+                ui.card(
+                    ui.card_header("Interpretación estadística"),
+                    ui.output_ui("interpretacion_social")
+                ),
+                class_="analysis-card"
             )
         ),
         id="pestanas",
@@ -896,6 +937,168 @@ def server(input, output, session):
                 )
             )
 
+
+
+    # ==========================================
+    # PESTAÑA 5: APOYO SOCIAL Y FAMILIAR
+    # ==========================================
+
+    NOMBRES_SOCIAL = {
+        "FamilySupport": "Apoyo familiar",
+        "SocialActivity": "Actividad social",
+        "PeerRelationship": "Relación con compañeros"
+    }
+
+    @reactive.calc
+    def datos_social():
+        """Prepara los datos y los divide en grupos del mismo tamaño (cuantiles)."""
+        variable = input.variable_social()
+        columnas = [variable, "MentalHealthStatus", "PHQ9", "GAD7"]
+
+        datos = df[columnas].copy()
+        for columna in columnas:
+            datos[columna] = pd.to_numeric(datos[columna], errors="coerce")
+        datos = datos.dropna()
+
+        # Se calculan los límites de los grupos y se crean etiquetas legibles
+        _, bordes = pd.qcut(
+            datos[variable],
+            q=input.n_grupos_social(),
+            retbins=True,
+            duplicates="drop"
+        )
+        etiquetas = [
+            f"{bordes[i]:.2f} – {bordes[i + 1]:.2f}"
+            for i in range(len(bordes) - 1)
+        ]
+        datos["Grupo"] = pd.cut(
+            datos[variable],
+            bins=bordes,
+            labels=etiquetas,
+            include_lowest=True
+        )
+        return datos, etiquetas
+
+    @render_widget
+    def plot_social():
+        datos, etiquetas = datos_social()
+        variable = input.variable_social()
+        nombre = NOMBRES_SOCIAL[variable]
+
+        if input.tipo_grafico_social() == "barras":
+            # Porcentaje de estudiantes con estado de salud mental "saludable" en cada grupo
+            resumen = (
+                datos.groupby("Grupo", observed=True)["MentalHealthStatus"]
+                .agg(["mean", "size"])
+                .reset_index()
+            )
+            resumen["Porcentaje"] = resumen["mean"] * 100
+            resumen["Etiqueta"] = resumen["Porcentaje"].round(1).astype(str) + "%"
+            resumen = resumen.rename(columns={"size": "Estudiantes"})
+            promedio_general = datos["MentalHealthStatus"].mean() * 100
+
+            fig = px.bar(
+                resumen,
+                x="Grupo",
+                y="Porcentaje",
+                text="Etiqueta",
+                hover_data={"Estudiantes": True, "Porcentaje": ":.1f"},
+                category_orders={"Grupo": etiquetas},
+                labels={
+                    "Grupo": f"{nombre} (rango del grupo)",
+                    "Porcentaje": "Estudiantes saludables (%)"
+                },
+                title=f"Porcentaje de estudiantes saludables según {nombre.lower()}",
+                template="plotly_white"
+            )
+            fig.add_hline(
+                y=promedio_general,
+                line_dash="dash",
+                annotation_text=f"Promedio general: {promedio_general:.1f}%",
+                annotation_position="top left"
+            )
+            fig.update_traces(textposition="outside")
+            fig.update_yaxes(range=[0, max(resumen["Porcentaje"].max(), promedio_general) * 1.3])
+            fig.update_layout(height=500)
+
+        else:
+            indicador = input.indicador_social()
+            nombre_indicador = "Depresión (PHQ-9)" if indicador == "PHQ9" else "Ansiedad (GAD-7)"
+
+            fig = px.box(
+                datos,
+                x="Grupo",
+                y=indicador,
+                color="Grupo",
+                points="outliers",
+                category_orders={"Grupo": etiquetas},
+                labels={
+                    "Grupo": f"{nombre} (rango del grupo)",
+                    indicador: nombre_indicador
+                },
+                title=f"{nombre_indicador} según {nombre.lower()}",
+                template="plotly_white"
+            )
+            fig.update_layout(showlegend=False, height=500)
+
+        fig.update_layout(title_x=0.5, margin=dict(t=90, b=70))
+        return fig
+
+    @render.text
+    def resumen_social():
+        datos, _ = datos_social()
+        return f"Estudiantes analizados: {len(datos)}"
+
+    @render.ui
+    def interpretacion_social():
+        datos, _ = datos_social()
+        variable = input.variable_social()
+        nombre = NOMBRES_SOCIAL[variable].lower()
+
+        if len(datos) < 3:
+            return ui.p("Se requieren al menos 3 observaciones para realizar el análisis.")
+
+        def describir(r):
+            magnitud = abs(r)
+            if magnitud < 0.20:
+                fuerza = "muy débil"
+            elif magnitud < 0.40:
+                fuerza = "débil"
+            elif magnitud < 0.60:
+                fuerza = "moderada"
+            elif magnitud < 0.80:
+                fuerza = "fuerte"
+            else:
+                fuerza = "muy fuerte"
+            direccion = "positiva" if r > 0 else "negativa" if r < 0 else "nula"
+            return f"r = {r:.3f} (asociación {direccion} {fuerza})"
+
+        r_estado = datos[variable].corr(datos["MentalHealthStatus"])
+        r_phq = datos[variable].corr(datos["PHQ9"])
+        r_gad = datos[variable].corr(datos["GAD7"])
+
+        resumen = datos.groupby("Grupo", observed=True)["MentalHealthStatus"].mean() * 100
+        mejor, peor = resumen.idxmax(), resumen.idxmin()
+
+        return ui.div(
+            ui.h4("Resumen estadístico"),
+            ui.p(f"Porcentaje general de estudiantes saludables: {datos['MentalHealthStatus'].mean() * 100:.1f}%"),
+            ui.p(
+                f"Grupo con mayor porcentaje de estudiantes saludables ({nombre}: {mejor}): {resumen.max():.1f}%. "
+                f"Grupo con menor porcentaje ({nombre}: {peor}): {resumen.min():.1f}%."
+            ),
+            ui.hr(),
+            ui.h4(f"Correlaciones de Pearson con {nombre}"),
+            ui.p(f"Estado de salud mental (0 = en riesgo, 1 = saludable): {describir(r_estado)}."),
+            ui.p(f"Depresión (PHQ-9): {describir(r_phq)}."),
+            ui.p(f"Ansiedad (GAD-7): {describir(r_gad)}."),
+            ui.hr(),
+            ui.p(
+                "Las correlaciones describen asociaciones lineales y no implican causalidad. "
+                "Cuando |r| es muy cercano a 0, el factor social elegido casi no explica "
+                "las diferencias en salud mental dentro de este conjunto de datos."
+            )
+        )
 
 
 # ==========================================
