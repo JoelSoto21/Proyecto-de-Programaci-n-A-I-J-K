@@ -221,38 +221,63 @@ app_ui = ui.page_fluid(
         # PESTAÑA 3: SUEÑO Y SALUD MENTAL
         # ----------------------------------
         ui.nav_panel(
-            "Sueño y Salud Mental",
-            encabezado(
-                "Sueño, ansiedad y depresión",
-                "Explorá cómo se relacionan la duración y calidad del sueño con los indicadores de ansiedad y depresión.",
-                "ANÁLISIS 01"
+    "Sueño y Salud Mental",
+    encabezado(
+        "Sueño, ansiedad y depresión",
+        "Explorá cómo se relacionan la duración y calidad del sueño con los indicadores de ansiedad y depresión.",
+        "ANÁLISIS 01"
+    ),
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.h4("Personalizar gráfico"),
+            ui.input_select(
+                "metrica_salud", "Indicador psicológico promedio (eje Y)",
+                choices={"GAD7": "Ansiedad (GAD-7)", "PHQ9": "Depresión (PHQ-9)"}
             ),
-            ui.layout_sidebar(
-                ui.sidebar(
-                    ui.h4("Personalizar gráfico"),
-                    ui.input_select(
-                        "metrica_salud", "Indicador psicológico promedio (eje Y)",
-                        choices={"GAD7": "Ansiedad (GAD-7)", "PHQ9": "Depresión (PHQ-9)"}
-                    ),
-                    ui.input_select(
-                        "metrica_sueno", "Agrupar por indicador de sueño (eje X)",
-                        choices={"SleepHours": "Horas de Sueño", "SleepQuality": "Calidad del Sueño"}
-                    ),
-                    ui.input_switch(
-                        "ordenar_sueno_desc", "Ordenar barras de mayor a menor",
-                        value=False
-                    ),
-                    ui.input_switch(
-                        "mostrar_etiquetas_sueno", "Mostrar valores sobre las barras",
-                        value=True
-                    )
-                ),
-                ui.card(
-                    ui.card_header("Promedio del indicador psicológico según sueño"),
-                    output_widget("plot_sueno_ansiedad")
-                )
+            ui.input_select(
+                "metrica_sueno", "Agrupar por indicador de sueño (eje X)",
+                choices={"SleepHours": "Horas de Sueño", "SleepQuality": "Calidad del Sueño"}
+            ),
+            ui.input_switch(
+                "ordenar_sueno_desc", "Ordenar barras de mayor a menor",
+                value=False
+            ),
+            ui.input_switch(
+                "mostrar_etiquetas_sueno", "Mostrar valores sobre las barras",
+                value=True
             )
         ),
+        ui.div(
+            ui.card(
+                ui.card_header("Promedio del indicador psicológico según sueño"),
+                output_widget("plot_sueno_ansiedad")
+            ),
+            ui.card(
+                ui.card_header("Horas de sueño vs. otras variables"),
+                ui.input_checkbox_group(
+                    "vars_vs_sueno",
+                    "Seleccioná las variables a comparar con Horas de Sueño:",
+                    choices={
+                        "ScreenTime": "Tiempo de Pantalla",
+                        "AcademicStress": "Estrés Académico",
+                        "OnlineStress": "Estrés Online",
+                        "FinancialStress": "Estrés Financiero",
+                        "SocialActivity": "Actividad Social",
+                        "ExerciseFreq": "Frecuencia de Ejercicio",
+                        "DietQuality": "Calidad de Dieta",
+                        "SelfEfficacy": "Autoeficacia",
+                        "FamilySupport": "Apoyo Familiar",
+                        "PeerRelationship": "Relación con Pares",
+                        "GPA": "Promedio Académico (GPA)"
+                    },
+                    selected=["ScreenTime", "AcademicStress", "SocialActivity", "FinancialStress"],
+                    inline=True
+                ),
+                output_widget("plot_sueno_vs_seleccion")
+            )
+        )
+    )
+),
         # ----------------------------------
         # PESTAÑA 4: ESTRÉS Y RENDIMIENTO
         # ----------------------------------
@@ -496,102 +521,98 @@ def server(input, output, session):
 
     @render_widget
     def plot_sueno_ansiedad():
+        try:
+            col_y = input.metrica_salud() or "GAD7"
+            col_x = input.metrica_sueno() or "SleepHours"
 
-        col_y = input.metrica_salud()
-        col_x = input.metrica_sueno()
+            if col_x not in df.columns or col_y not in df.columns:
+                return px.bar(
+                    title="Columnas no encontradas en los datos",
+                    template="plotly_white"
+                )
 
-        df_clean = df.dropna(subset=[col_x, col_y]).copy()
-        df_clean[col_x] = pd.to_numeric(df_clean[col_x], errors="coerce")
-        df_clean[col_y] = pd.to_numeric(df_clean[col_y], errors="coerce")
-        df_clean = df_clean.dropna(subset=[col_x, col_y])
+            sub = df[[col_x, col_y]].copy()
+            sub[col_x] = pd.to_numeric(sub[col_x], errors="coerce")
+            sub[col_y] = pd.to_numeric(sub[col_y], errors="coerce")
+            sub = sub.dropna()
 
-        if col_x == "SleepHours":
-            df_clean["Categoria_X"] = (df_clean[col_x] * 2).round() / 2
-        else:
-            df_clean["Categoria_X"] = df_clean[col_x].round().astype(int)
+            if sub.empty:
+                return px.bar(
+                    title="Sin datos disponibles",
+                    template="plotly_white"
+                )
 
-        agg_spec = {
-            "valor_y": (col_y, "mean"),
-            "n_estudiantes": (col_y, "count"),
-        }
-        if "AcademicStress" in df_clean.columns:
-            df_clean["AcademicStress"] = pd.to_numeric(df_clean["AcademicStress"], errors="coerce")
-            agg_spec["estres_prom"] = ("AcademicStress", "mean")
-        if "GPA" in df_clean.columns:
-            df_clean["GPA"] = pd.to_numeric(df_clean["GPA"], errors="coerce")
-            agg_spec["gpa_prom"] = ("GPA", "mean")
+            if col_x == "SleepHours":
+                bins = [-float("inf"), 5, 6, 7, 8, 9, float("inf")]
+                labels = ["< 5h", "5–6h", "6–7h", "7–8h", "8–9h", "9+ h"]
+                sub["Grupo"] = pd.cut(sub[col_x], bins=bins, labels=labels, right=False).astype(str)
+                etiqueta_x = "Horas de Sueño"
+                orden_x = labels
+            else:
+                sub["Grupo"] = sub[col_x].round().clip(lower=0, upper=10).astype(int).astype(str)
+                etiqueta_x = "Calidad del Sueño"
+                orden_x = [str(i) for i in range(0, 11)]
 
-        df_bar = df_clean.groupby("Categoria_X", as_index=False).agg(**agg_spec)
+            df_bar = (
+                sub.groupby("Grupo", as_index=False)
+                .agg(
+                    Promedio=(col_y, "mean"),
+                    Estudiantes=(col_y, "count")
+                )
+            )
+            df_bar["Promedio"] = df_bar["Promedio"].round(2)
 
-        if input.ordenar_sueno_desc():
-            df_bar = df_bar.sort_values("valor_y", ascending=False)
-        else:
-            df_bar = df_bar.sort_values("Categoria_X", ascending=True)
+            if bool(input.ordenar_sueno_desc()):
+                df_bar = df_bar.sort_values("Promedio", ascending=False)
+            else:
+                mapa_orden = {k: i for i, k in enumerate(orden_x)}
+                df_bar["orden_tmp"] = df_bar["Grupo"].map(mapa_orden).fillna(999)
+                df_bar = df_bar.sort_values("orden_tmp").drop(columns=["orden_tmp"])
 
-        df_bar["Categoria_str"] = df_bar["Categoria_X"].astype(str)
-        df_bar["valor_redondeado"] = df_bar["valor_y"].round(2)
+            etiqueta_y = "Ansiedad (GAD-7)" if col_y == "GAD7" else "Depresión (PHQ-9)"
+            mostrar_txt = bool(input.mostrar_etiquetas_sueno())
 
-        nombres_etiquetas = {
-            "SleepHours": "Horas Promedio de Sueño",
-            "SleepQuality": "Calidad de Sueño (0-10)",
-            "GAD7": "Puntuación Promedio de Ansiedad (GAD-7)",
-            "PHQ9": "Puntuación Promedio de Depresión (PHQ-9)",
-        }
+            paleta = list(PALETA_SUENO) if "PALETA_SUENO" in globals() and len(PALETA_SUENO) > 0 else ["#7B5EA7", "#9B7EC4", "#5A4280", "#B89FE0", "#463266", "#D0BFEF"]
+            while len(paleta) < max(1, len(df_bar)):
+                paleta = paleta + paleta
 
-        hover_cols = {
-            "Categoria_str": False,
-            "valor_redondeado": ":.2f",
-            "n_estudiantes": True,
-        }
-        labels_hover = {
-            "Categoria_str": nombres_etiquetas.get(col_x, col_x),
-            "valor_redondeado": nombres_etiquetas.get(col_y, col_y),
-            "n_estudiantes": "Estudiantes",
-        }
-        if "estres_prom" in df_bar.columns:
-            df_bar["estres_prom"] = df_bar["estres_prom"].round(2)
-            hover_cols["estres_prom"] = ":.2f"
-            labels_hover["estres_prom"] = "Estrés Académico Prom."
-        if "gpa_prom" in df_bar.columns:
-            df_bar["gpa_prom"] = df_bar["gpa_prom"].round(2)
-            hover_cols["gpa_prom"] = ":.2f"
-            labels_hover["gpa_prom"] = "GPA Promedio"
+            fig = px.bar(
+                df_bar,
+                x="Grupo",
+                y="Promedio",
+                color="Grupo",
+                color_discrete_sequence=paleta,
+                text="Promedio" if mostrar_txt else None,
+                hover_data={"Estudiantes": True, "Promedio": ":.2f"},
+                labels={
+                    "Grupo": etiqueta_x,
+                    "Promedio": f"Promedio {etiqueta_y}",
+                },
+                title=f"Promedio de {etiqueta_y} según {etiqueta_x}",
+                template="plotly_white"
+            )
 
-        fig = px.bar(
-            df_bar,
-            x="Categoria_str",
-            y="valor_redondeado",
-            color="Categoria_str",
-            color_discrete_sequence=PALETA_SUENO,
-            text="valor_redondeado" if input.mostrar_etiquetas_sueno() else None,
-            hover_data=hover_cols,
-            labels=labels_hover,
-            title=(
-                f"{nombres_etiquetas.get(col_y, col_y)} según "
-                f"{nombres_etiquetas.get(col_x, col_x)}"
-            ),
-            template="plotly_white"
-        )
+            if mostrar_txt:
+                fig.update_traces(
+                    texttemplate="%{text:.2f}",
+                    textposition="outside",
+                    cliponaxis=False
+                )
 
-        fig.update_traces(
-            texttemplate="%{text:.2f}",
-            textposition="outside",
-            marker_line_width=0.8,
-            marker_line_color="white"
-        )
+            max_val = float(df_bar["Promedio"].max()) if not df_bar.empty else 1.0
+            fig.update_layout(
+                showlegend=False,
+                xaxis={"type": "category"},
+                yaxis={"range": [0, max_val * 1.18 if max_val > 0 else 1]},
+                margin=dict(t=60, b=50, l=50, r=20)
+            )
+            return fig
 
-        max_y = df_bar["valor_redondeado"].max() if len(df_bar) > 0 else 1
-        fig.update_layout(
-            showlegend=False,
-            xaxis_title=nombres_etiquetas.get(col_x, col_x),
-            yaxis_title=nombres_etiquetas.get(col_y, col_y),
-            hovermode="x unified",
-            margin=dict(t=60, b=40, l=40, r=20),
-            yaxis=dict(range=[0, max_y * 1.18])
-        )
-
-        return fig
-    
+        except Exception as e:
+            return px.bar(
+                title=f"Error al generar gráfico: {e}",
+                template="plotly_white"
+            )
    
     # ==========================================
     # PESTAÑA 4: ESTRÉS Y RENDIMIENTO
