@@ -512,8 +512,16 @@ def server(input, output, session):
             datos.iloc[inicio:fin].reset_index(drop=True),
             filters=True,
             width="100%",
-            height="450px"
-        )
+            height="450px",
+    styles=[
+        {
+            "style": {
+                "min-width": "160px"
+            }
+        }
+    ]
+)
+        
 
     # --------------------------------------
     # PESTAÑA 3: GRÁFICO DE SUEÑO Y SALUD MENTAL
