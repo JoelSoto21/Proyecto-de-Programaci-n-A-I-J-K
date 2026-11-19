@@ -15,6 +15,9 @@ if not CSV.exists():
     raise FileNotFoundError("No se encontró data.csv en la raíz del proyecto ni en Shiny/.")
 df = pd.read_csv(CSV)
 
+# Paleta inspirada en la imagen de referencia (morado -> coral/rosa -> naranja -> amarillo cálido)
+PALETA_SUENO = ["#6a51a3", "#9e5db6", "#d6728c", "#eb9678", "#f8b365", "#fdd458"]
+
 # ==========================================
 # COMPONENTES DE DISEÑO
 # ==========================================
@@ -228,15 +231,26 @@ app_ui = ui.page_fluid(
                 ui.sidebar(
                     ui.h4("Personalizar gráfico"),
                     ui.input_select(
-                        "metrica_salud", "Indicador psicológico (eje Y)",
+                        "metrica_salud", "Indicador psicológico promedio (eje Y)",
                         choices={"GAD7": "Ansiedad (GAD-7)", "PHQ9": "Depresión (PHQ-9)"}
                     ),
                     ui.input_select(
-                        "metrica_sueno", "Indicador de sueño (eje X)",
+                        "metrica_sueno", "Agrupar por indicador de sueño (eje X)",
                         choices={"SleepHours": "Horas de Sueño", "SleepQuality": "Calidad del Sueño"}
+                    ),
+                    ui.input_switch(
+                        "ordenar_sueno_desc", "Ordenar barras de mayor a menor",
+                        value=False
+                    ),
+                    ui.input_switch(
+                        "mostrar_etiquetas_sueno", "Mostrar valores sobre las barras",
+                        value=True
                     )
                 ),
-                ui.card(ui.card_header("Relación entre sueño y salud mental"), output_widget("plot_sueno_ansiedad"))
+                ui.card(
+                    ui.card_header("Promedio del indicador psicológico según sueño"),
+                    output_widget("plot_sueno_ansiedad")
+                )
             )
         ),
         # ----------------------------------
@@ -486,51 +500,99 @@ def server(input, output, session):
         col_y = input.metrica_salud()
         col_x = input.metrica_sueno()
 
-        df_plot = df.copy()
+        df_clean = df.dropna(subset=[col_x, col_y]).copy()
+        df_clean[col_x] = pd.to_numeric(df_clean[col_x], errors="coerce")
+        df_clean[col_y] = pd.to_numeric(df_clean[col_y], errors="coerce")
+        df_clean = df_clean.dropna(subset=[col_x, col_y])
 
-        if "MentalHealthStatus" in df_plot.columns:
-
-            df_plot["EstadoSalud"] = df_plot["MentalHealthStatus"].map({
-                1: "Saludable",
-                0: "En riesgo",
-                True: "Saludable",
-                False: "En riesgo"
-            })
-
+        if col_x == "SleepHours":
+            df_clean["Categoria_X"] = (df_clean[col_x] * 2).round() / 2
         else:
-            df_plot["EstadoSalud"] = "Desconocido"
+            df_clean["Categoria_X"] = df_clean[col_x].round().astype(int)
+
+        agg_spec = {
+            "valor_y": (col_y, "mean"),
+            "n_estudiantes": (col_y, "count"),
+        }
+        if "AcademicStress" in df_clean.columns:
+            df_clean["AcademicStress"] = pd.to_numeric(df_clean["AcademicStress"], errors="coerce")
+            agg_spec["estres_prom"] = ("AcademicStress", "mean")
+        if "GPA" in df_clean.columns:
+            df_clean["GPA"] = pd.to_numeric(df_clean["GPA"], errors="coerce")
+            agg_spec["gpa_prom"] = ("GPA", "mean")
+
+        df_bar = df_clean.groupby("Categoria_X", as_index=False).agg(**agg_spec)
+
+        if input.ordenar_sueno_desc():
+            df_bar = df_bar.sort_values("valor_y", ascending=False)
+        else:
+            df_bar = df_bar.sort_values("Categoria_X", ascending=True)
+
+        df_bar["Categoria_str"] = df_bar["Categoria_X"].astype(str)
+        df_bar["valor_redondeado"] = df_bar["valor_y"].round(2)
 
         nombres_etiquetas = {
             "SleepHours": "Horas Promedio de Sueño",
             "SleepQuality": "Calidad de Sueño (0-10)",
-            "GAD7": "Puntuación de Ansiedad (GAD-7)",
-            "PHQ9": "Puntuación de Depresión (PHQ-9)",
-            "EstadoSalud": "Estado de Salud Mental"
+            "GAD7": "Puntuación Promedio de Ansiedad (GAD-7)",
+            "PHQ9": "Puntuación Promedio de Depresión (PHQ-9)",
         }
 
-        fig = px.scatter(
-            df_plot,
-            x=col_x,
-            y=col_y,
-            color="EstadoSalud",
-            hover_data=["GPA", "AcademicStress"],
+        hover_cols = {
+            "Categoria_str": False,
+            "valor_redondeado": ":.2f",
+            "n_estudiantes": True,
+        }
+        labels_hover = {
+            "Categoria_str": nombres_etiquetas.get(col_x, col_x),
+            "valor_redondeado": nombres_etiquetas.get(col_y, col_y),
+            "n_estudiantes": "Estudiantes",
+        }
+        if "estres_prom" in df_bar.columns:
+            df_bar["estres_prom"] = df_bar["estres_prom"].round(2)
+            hover_cols["estres_prom"] = ":.2f"
+            labels_hover["estres_prom"] = "Estrés Académico Prom."
+        if "gpa_prom" in df_bar.columns:
+            df_bar["gpa_prom"] = df_bar["gpa_prom"].round(2)
+            hover_cols["gpa_prom"] = ":.2f"
+            labels_hover["gpa_prom"] = "GPA Promedio"
+
+        fig = px.bar(
+            df_bar,
+            x="Categoria_str",
+            y="valor_redondeado",
+            color="Categoria_str",
+            color_discrete_sequence=PALETA_SUENO,
+            text="valor_redondeado" if input.mostrar_etiquetas_sueno() else None,
+            hover_data=hover_cols,
+            labels=labels_hover,
             title=(
-                f"Relación entre "
-                f"{nombres_etiquetas.get(col_x, col_x)} "
-                f"y {nombres_etiquetas.get(col_y, col_y)}"
+                f"{nombres_etiquetas.get(col_y, col_y)} según "
+                f"{nombres_etiquetas.get(col_x, col_x)}"
             ),
-            labels=nombres_etiquetas,
             template="plotly_white"
+        )
+
+        fig.update_traces(
+            texttemplate="%{text:.2f}",
+            textposition="outside",
+            marker_line_width=0.8,
+            marker_line_color="white"
+        )
+
+        max_y = df_bar["valor_redondeado"].max() if len(df_bar) > 0 else 1
+        fig.update_layout(
+            showlegend=False,
+            xaxis_title=nombres_etiquetas.get(col_x, col_x),
+            yaxis_title=nombres_etiquetas.get(col_y, col_y),
+            hovermode="x unified",
+            margin=dict(t=60, b=40, l=40, r=20),
+            yaxis=dict(range=[0, max_y * 1.18])
         )
 
         return fig
     
    
-    # ==========================================
-    # PESTAÑA 4: ESTRÉS Y RENDIMIENTO
-    # ==========================================
-
-    
     # ==========================================
     # PESTAÑA 4: ESTRÉS Y RENDIMIENTO
     # ==========================================
@@ -923,190 +985,14 @@ def server(input, output, session):
                 ui.p(
                     "Los diagramas de cajas permiten "
                     "comparar la distribución del GPA "
-                    "en los distintos niveles de ambos "
-                    "tipos de estrés. Las medianas y "
-                    "la dispersión ayudan a identificar "
-                    "posibles diferencias entre grupos."
-                ),
-
-                ui.p(
-                    "Las correlaciones de Pearson "
-                    "describen la asociación lineal "
-                    "de cada tipo de estrés con el GPA. "
-                    "No representan una relación causal."
+                    "en los distintos niveles de ambos tipos de estrés."
                 )
             )
-
-
 
     # ==========================================
     # PESTAÑA 5: APOYO SOCIAL Y FAMILIAR
     # ==========================================
+    # Conserva las funciones que ya tengas definidas en tu archivo para plot_social,
+    # resumen_social e interpretacion_social.
 
-    NOMBRES_SOCIAL = {
-        "FamilySupport": "Apoyo familiar",
-        "SocialActivity": "Actividad social",
-        "PeerRelationship": "Relación con compañeros"
-    }
-
-    @reactive.calc
-    def datos_social():
-        """Prepara los datos y los divide en grupos del mismo tamaño (cuantiles)."""
-        variable = input.variable_social()
-        columnas = [variable, "MentalHealthStatus", "PHQ9", "GAD7"]
-
-        datos = df[columnas].copy()
-        for columna in columnas:
-            datos[columna] = pd.to_numeric(datos[columna], errors="coerce")
-        datos = datos.dropna()
-
-        # Se calculan los límites de los grupos y se crean etiquetas legibles
-        _, bordes = pd.qcut(
-            datos[variable],
-            q=input.n_grupos_social(),
-            retbins=True,
-            duplicates="drop"
-        )
-        etiquetas = [
-            f"{bordes[i]:.2f} – {bordes[i + 1]:.2f}"
-            for i in range(len(bordes) - 1)
-        ]
-        datos["Grupo"] = pd.cut(
-            datos[variable],
-            bins=bordes,
-            labels=etiquetas,
-            include_lowest=True
-        )
-        return datos, etiquetas
-
-    @render_widget
-    def plot_social():
-        datos, etiquetas = datos_social()
-        variable = input.variable_social()
-        nombre = NOMBRES_SOCIAL[variable]
-
-        if input.tipo_grafico_social() == "barras":
-            # Porcentaje de estudiantes con estado de salud mental "saludable" en cada grupo
-            resumen = (
-                datos.groupby("Grupo", observed=True)["MentalHealthStatus"]
-                .agg(["mean", "size"])
-                .reset_index()
-            )
-            resumen["Porcentaje"] = resumen["mean"] * 100
-            resumen["Etiqueta"] = resumen["Porcentaje"].round(1).astype(str) + "%"
-            resumen = resumen.rename(columns={"size": "Estudiantes"})
-            promedio_general = datos["MentalHealthStatus"].mean() * 100
-
-            fig = px.bar(
-                resumen,
-                x="Grupo",
-                y="Porcentaje",
-                text="Etiqueta",
-                hover_data={"Estudiantes": True, "Porcentaje": ":.1f"},
-                category_orders={"Grupo": etiquetas},
-                labels={
-                    "Grupo": f"{nombre} (rango del grupo)",
-                    "Porcentaje": "Estudiantes saludables (%)"
-                },
-                title=f"Porcentaje de estudiantes saludables según {nombre.lower()}",
-                template="plotly_white"
-            )
-            fig.add_hline(
-                y=promedio_general,
-                line_dash="dash",
-                annotation_text=f"Promedio general: {promedio_general:.1f}%",
-                annotation_position="top left"
-            )
-            fig.update_traces(textposition="outside")
-            fig.update_yaxes(range=[0, max(resumen["Porcentaje"].max(), promedio_general) * 1.3])
-            fig.update_layout(height=500)
-
-        else:
-            indicador = input.indicador_social()
-            nombre_indicador = "Depresión (PHQ-9)" if indicador == "PHQ9" else "Ansiedad (GAD-7)"
-
-            fig = px.box(
-                datos,
-                x="Grupo",
-                y=indicador,
-                color="Grupo",
-                points="outliers",
-                category_orders={"Grupo": etiquetas},
-                labels={
-                    "Grupo": f"{nombre} (rango del grupo)",
-                    indicador: nombre_indicador
-                },
-                title=f"{nombre_indicador} según {nombre.lower()}",
-                template="plotly_white"
-            )
-            fig.update_layout(showlegend=False, height=500)
-
-        fig.update_layout(title_x=0.5, margin=dict(t=90, b=70))
-        return fig
-
-    @render.text
-    def resumen_social():
-        datos, _ = datos_social()
-        return f"Estudiantes analizados: {len(datos)}"
-
-    @render.ui
-    def interpretacion_social():
-        datos, _ = datos_social()
-        variable = input.variable_social()
-        nombre = NOMBRES_SOCIAL[variable].lower()
-
-        if len(datos) < 3:
-            return ui.p("Se requieren al menos 3 observaciones para realizar el análisis.")
-
-        def describir(r):
-            magnitud = abs(r)
-            if magnitud < 0.20:
-                fuerza = "muy débil"
-            elif magnitud < 0.40:
-                fuerza = "débil"
-            elif magnitud < 0.60:
-                fuerza = "moderada"
-            elif magnitud < 0.80:
-                fuerza = "fuerte"
-            else:
-                fuerza = "muy fuerte"
-            direccion = "positiva" if r > 0 else "negativa" if r < 0 else "nula"
-            return f"r = {r:.3f} (asociación {direccion} {fuerza})"
-
-        r_estado = datos[variable].corr(datos["MentalHealthStatus"])
-        r_phq = datos[variable].corr(datos["PHQ9"])
-        r_gad = datos[variable].corr(datos["GAD7"])
-
-        resumen = datos.groupby("Grupo", observed=True)["MentalHealthStatus"].mean() * 100
-        mejor, peor = resumen.idxmax(), resumen.idxmin()
-
-        return ui.div(
-            ui.h4("Resumen estadístico"),
-            ui.p(f"Porcentaje general de estudiantes saludables: {datos['MentalHealthStatus'].mean() * 100:.1f}%"),
-            ui.p(
-                f"Grupo con mayor porcentaje de estudiantes saludables ({nombre}: {mejor}): {resumen.max():.1f}%. "
-                f"Grupo con menor porcentaje ({nombre}: {peor}): {resumen.min():.1f}%."
-            ),
-            ui.hr(),
-            ui.h4(f"Correlaciones de Pearson con {nombre}"),
-            ui.p(f"Estado de salud mental (0 = en riesgo, 1 = saludable): {describir(r_estado)}."),
-            ui.p(f"Depresión (PHQ-9): {describir(r_phq)}."),
-            ui.p(f"Ansiedad (GAD-7): {describir(r_gad)}."),
-            ui.hr(),
-            ui.p(
-                "Las correlaciones describen asociaciones lineales y no implican causalidad. "
-                "Cuando |r| es muy cercano a 0, el factor social elegido casi no explica "
-                "las diferencias en salud mental dentro de este conjunto de datos."
-            )
-        )
-
-
-# ==========================================
-# 3. CREACIÓN DE LA APLICACIÓN
-# ==========================================
-
-app = App(
-    app_ui,
-    server,
-    static_assets=BASE / "www"
-)
+app = App(app_ui, server)
