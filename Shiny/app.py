@@ -1064,6 +1064,26 @@ def server(input, output, session):
         variable = input.variable_social()
         nombre = NOMBRES_SOCIAL[variable]
 
+        # Misma paleta que usa el gráfico de Sueño y Salud Mental
+        paleta = (
+            list(PALETA_SUENO) if "PALETA_SUENO" in globals() and len(PALETA_SUENO) > 0
+            else ["#6a51a3", "#9e5db6", "#d6728c", "#eb9678", "#f8b365", "#fdd458"]
+        )
+        while len(paleta) < max(1, len(etiquetas)):
+            paleta = paleta + paleta
+
+        def color_texto(color_hex):
+            """Devuelve blanco u oscuro, el que mejor se lea sobre el color de la barra."""
+            try:
+                canales = [int(color_hex[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            except Exception:
+                return "#ffffff"
+            lineal = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in canales]
+            luminancia = 0.2126 * lineal[0] + 0.7152 * lineal[1] + 0.0722 * lineal[2]
+            contraste_blanco = 1.05 / (luminancia + 0.05)
+            contraste_oscuro = (luminancia + 0.05) / 0.076
+            return "#ffffff" if contraste_blanco >= contraste_oscuro else "#2d2d2d"
+
         if input.tipo_grafico_social() == "barras":
             # Porcentaje de estudiantes con estado de salud mental "saludable" en cada grupo
             resumen = (
@@ -1076,10 +1096,16 @@ def server(input, output, session):
             resumen = resumen.rename(columns={"size": "Estudiantes"})
             promedio_general = datos["MentalHealthStatus"].mean() * 100
 
+            # Altura máxima del eje Y, con espacio arriba para las etiquetas
+            y_maximo = max(resumen["Porcentaje"].max(), promedio_general) * 1.3
+            valores = {str(g): v for g, v in zip(resumen["Grupo"], resumen["Porcentaje"])}
+
             fig = px.bar(
                 resumen,
                 x="Grupo",
                 y="Porcentaje",
+                color="Grupo",
+                color_discrete_sequence=paleta,
                 text="Etiqueta",
                 hover_data={"Estudiantes": True, "Porcentaje": ":.1f"},
                 category_orders={"Grupo": etiquetas},
@@ -1090,15 +1116,49 @@ def server(input, output, session):
                 title=f"Porcentaje de estudiantes saludables según {nombre.lower()}",
                 template="plotly_white"
             )
+
+            # Etiqueta de cada barra: afuera por defecto; si la línea del promedio
+            # pasaría justo encima de la etiqueta, se coloca dentro de la barra
+            def ajustar_etiqueta(traza):
+                valor = valores.get(str(traza.name), 0)
+                if valor < promedio_general <= valor + 0.08 * y_maximo:
+                    traza.update(
+                        textposition="inside",
+                        insidetextanchor="end",
+                        textfont=dict(size=13, color=color_texto(traza.marker.color))
+                    )
+                else:
+                    traza.update(
+                        textposition="outside",
+                        textfont=dict(size=13, color="#333333")
+                    )
+                traza.update(cliponaxis=False)
+
+            fig.for_each_trace(ajustar_etiqueta)
+
+            # Línea del promedio general, sin texto encima para que no choque con las barras
             fig.add_hline(
                 y=promedio_general,
                 line_dash="dash",
-                annotation_text=f"Promedio general: {promedio_general:.1f}%",
-                annotation_position="top left"
+                line_color="#4a4a4a",
+                line_width=1.5
             )
-            fig.update_traces(textposition="outside")
-            fig.update_yaxes(range=[0, max(resumen["Porcentaje"].max(), promedio_general) * 1.3])
-            fig.update_layout(height=500)
+            # El texto del promedio va fuera del gráfico, arriba a la derecha
+            fig.add_annotation(
+                xref="paper",
+                yref="paper",
+                x=1,
+                y=1.02,
+                xanchor="right",
+                yanchor="bottom",
+                showarrow=False,
+                text=f"– – –  Promedio general: {promedio_general:.1f}%",
+                font=dict(size=12, color="#4a4a4a")
+            )
+
+            fig.update_xaxes(type="category")
+            fig.update_yaxes(range=[0, y_maximo])
+            fig.update_layout(showlegend=False, height=500)
 
         else:
             indicador = input.indicador_social()
@@ -1109,6 +1169,7 @@ def server(input, output, session):
                 x="Grupo",
                 y=indicador,
                 color="Grupo",
+                color_discrete_sequence=paleta,
                 points="outliers",
                 category_orders={"Grupo": etiquetas},
                 labels={
@@ -1118,6 +1179,7 @@ def server(input, output, session):
                 title=f"{nombre_indicador} según {nombre.lower()}",
                 template="plotly_white"
             )
+            fig.update_xaxes(type="category")
             fig.update_layout(showlegend=False, height=500)
 
         fig.update_layout(title_x=0.5, margin=dict(t=90, b=70))
