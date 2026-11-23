@@ -84,9 +84,13 @@ Para ejecutar el proyecto localmente, se recomienda tener instalado:
 ## Instalación de paquetes necesarios 
 
 from shiny import App, ui, render, reactive
+
 import plotly.express as px
+
 import pandas as pd
+
 from shinywidgets import output_widget, render_widget
+
 from pathlib import Path
 
 ---
