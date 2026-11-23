@@ -1,1 +1,4 @@
 shiny
+pandas
+plotly
+shinywidgets
