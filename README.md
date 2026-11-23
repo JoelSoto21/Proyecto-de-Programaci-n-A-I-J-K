@@ -58,7 +58,7 @@ El proyecto se centrará en tres áreas principales:
 | `ScreenTime` | Promedio de exposición a pantallas (1-12 horas/día) |
 | `AcademicStress` | Presión por la carga de trabajo académico (0-10) |
 | `DietQuality` | Puntuación de nutrición y dieta equilibrada (1-10) |
-| `SelfEfficacy` | Confidence in coping with challenges (0-10) |
+| `SelfEfficacy` | Confianza para afrontar desafíos (0-10) |
 | `PeerRelationship` | Relación con compañeros de clase (0-10) |
 | `FinancialStress` | Intensidad de la carga financiera (0-10) |
 | `SleepQuality` | Satisfacción subjetiva con el sueño (0-10) |
