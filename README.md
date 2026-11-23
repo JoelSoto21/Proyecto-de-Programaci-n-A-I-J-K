@@ -75,6 +75,20 @@ Se pretende construir una aplicación que permita explorar el conjunto de datos 
 
 El proyecto tiene un enfoque exploratorio y académico, por lo que los resultados permitirán identificar asociaciones, pero no establecer relaciones causales.
 
+## Instalación
+Para ejecutar el proyecto localmente, se recomienda tener instalado:
+-Git
+-Python
+-Shiny
+
+## Instalación de paquetes necesarios 
+
+from shiny import App, ui, render, reactive
+import plotly.express as px
+import pandas as pd
+from shinywidgets import output_widget, render_widget
+from pathlib import Path
+
 ---
 
 ## Referencias
@@ -95,3 +109,16 @@ Este proyecto tiene fines académicos y busca contribuir a la comprensión de lo
 Los resultados obtenidos deben interpretarse considerando las características y limitaciones del conjunto de datos utilizado.
 
 **La aplicación no constituye una herramienta de diagnóstico clínico ni sustituye la evaluación de profesionales de salud mental.**
+
+## Autores
+
+Proyecto desarrollado por:
+
+- Aylin Solís Mejías - C5L997
+- Ianna Fuentes Córdoba - C5F182
+- Joel Villalobos Soto - C5K985
+- Kenneth Torres Quesada - C5K250
+
+Curso: **Programación para Estadística II (XS-0130)**  
+Universidad de Costa Rica  
+Noviembre, 2026
