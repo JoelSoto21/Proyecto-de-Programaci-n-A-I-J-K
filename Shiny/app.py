@@ -18,6 +18,22 @@ df = pd.read_csv(CSV)
 # Paleta inspirada en la imagen de referencia (morado -> coral/rosa -> naranja -> amarillo cálido)
 PALETA_SUENO = ["#6a51a3", "#9e5db6", "#d6728c", "#eb9678", "#f8b365", "#fdd458"]
 
+# Paleta de la pestaña Apoyo Social y Familiar: colores distintos entre sí
+# (turquesa, vino, azul marino, verde oliva, café, gris) y distintos a los de los otros gráficos
+PALETA_SOCIAL = ["#0f8b8d", "#a4243b", "#1d3557", "#7a9e3b", "#8c6a43", "#4f5d75"]
+
+# Imagen del pie de página: se lee del disco y se incrusta en la propia página,
+# así no depende de que el servidor entregue la carpeta www.
+def cargar_imagen_base64(ruta):
+    try:
+        import base64
+        datos = Path(ruta).read_bytes()
+        return "data:image/png;base64," + base64.b64encode(datos).decode("ascii")
+    except Exception:
+        return None
+
+FOOTER_IMG = cargar_imagen_base64(BASE / "www" / "footer.png")
+
 # ==========================================
 # COMPONENTES DE DISEÑO
 # ==========================================
@@ -400,7 +416,7 @@ app_ui = ui.page_fluid(
     ),
     ui.tags.footer(
         ui.tags.img(
-            src="/footer.png",
+            src=FOOTER_IMG or "/footer.png",
             alt="Salud mental universitaria",
             class_="footer-imagen"
         ),
@@ -1127,7 +1143,221 @@ def server(input, output, session):
     # ==========================================
     # PESTAÑA 5: APOYO SOCIAL Y FAMILIAR
     # ==========================================
-    # Conserva las funciones que ya tengas definidas en tu archivo para plot_social,
-    # resumen_social e interpretacion_social.
+
+    NOMBRES_SOCIAL = {
+        "FamilySupport": "Apoyo familiar",
+        "SocialActivity": "Actividad social",
+        "PeerRelationship": "Relación con compañeros"
+    }
+
+    @reactive.calc
+    def datos_social():
+        """Prepara los datos y los divide en grupos del mismo tamaño (cuantiles)."""
+        variable = input.variable_social()
+        columnas = [variable, "MentalHealthStatus", "PHQ9", "GAD7"]
+
+        datos = df[columnas].copy()
+        for columna in columnas:
+            datos[columna] = pd.to_numeric(datos[columna], errors="coerce")
+        datos = datos.dropna()
+
+        # Se calculan los límites de los grupos y se crean etiquetas legibles
+        _, bordes = pd.qcut(
+            datos[variable],
+            q=input.n_grupos_social(),
+            retbins=True,
+            duplicates="drop"
+        )
+        etiquetas = [
+            f"{bordes[i]:.2f} – {bordes[i + 1]:.2f}"
+            for i in range(len(bordes) - 1)
+        ]
+        datos["Grupo"] = pd.cut(
+            datos[variable],
+            bins=bordes,
+            labels=etiquetas,
+            include_lowest=True
+        )
+        return datos, etiquetas
+
+    @render_widget
+    def plot_social():
+        datos, etiquetas = datos_social()
+        variable = input.variable_social()
+        nombre = NOMBRES_SOCIAL[variable]
+
+        # Colores propios de esta pestaña (se cambian en PALETA_SOCIAL, al inicio del archivo)
+        paleta = list(PALETA_SOCIAL)
+        while len(paleta) < max(1, len(etiquetas)):
+            paleta = paleta + paleta
+
+        def color_texto(color_hex):
+            """Devuelve blanco u oscuro, el que mejor se lea sobre el color de la barra."""
+            try:
+                canales = [int(color_hex[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            except Exception:
+                return "#ffffff"
+            lineal = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in canales]
+            luminancia = 0.2126 * lineal[0] + 0.7152 * lineal[1] + 0.0722 * lineal[2]
+            contraste_blanco = 1.05 / (luminancia + 0.05)
+            contraste_oscuro = (luminancia + 0.05) / 0.076
+            return "#ffffff" if contraste_blanco >= contraste_oscuro else "#2d2d2d"
+
+        if input.tipo_grafico_social() == "barras":
+            # Porcentaje de estudiantes con estado de salud mental "saludable" en cada grupo
+            resumen = (
+                datos.groupby("Grupo", observed=True)["MentalHealthStatus"]
+                .agg(["mean", "size"])
+                .reset_index()
+            )
+            resumen["Porcentaje"] = resumen["mean"] * 100
+            resumen["Etiqueta"] = resumen["Porcentaje"].round(1).astype(str) + "%"
+            resumen = resumen.rename(columns={"size": "Estudiantes"})
+            promedio_general = datos["MentalHealthStatus"].mean() * 100
+
+            # Altura máxima del eje Y, con espacio arriba para las etiquetas
+            y_maximo = max(resumen["Porcentaje"].max(), promedio_general) * 1.3
+            valores = {str(g): v for g, v in zip(resumen["Grupo"], resumen["Porcentaje"])}
+
+            fig = px.bar(
+                resumen,
+                x="Grupo",
+                y="Porcentaje",
+                color="Grupo",
+                color_discrete_sequence=paleta,
+                text="Etiqueta",
+                hover_data={"Estudiantes": True, "Porcentaje": ":.1f"},
+                category_orders={"Grupo": etiquetas},
+                labels={
+                    "Grupo": f"{nombre} (rango del grupo)",
+                    "Porcentaje": "Estudiantes saludables (%)"
+                },
+                title=f"Porcentaje de estudiantes saludables según {nombre.lower()}",
+                template="plotly_white"
+            )
+
+            # Etiqueta de cada barra: afuera por defecto; si la línea del promedio
+            # pasaría justo encima de la etiqueta, se coloca dentro de la barra
+            def ajustar_etiqueta(traza):
+                valor = valores.get(str(traza.name), 0)
+                if valor < promedio_general <= valor + 0.08 * y_maximo:
+                    traza.update(
+                        textposition="inside",
+                        insidetextanchor="end",
+                        textfont=dict(size=13, color=color_texto(traza.marker.color))
+                    )
+                else:
+                    traza.update(
+                        textposition="outside",
+                        textfont=dict(size=13, color="#333333")
+                    )
+                traza.update(cliponaxis=False)
+
+            fig.for_each_trace(ajustar_etiqueta)
+
+            # Línea del promedio general, sin texto encima para que no choque con las barras
+            fig.add_hline(
+                y=promedio_general,
+                line_dash="dash",
+                line_color="#4a4a4a",
+                line_width=1.5
+            )
+            # El texto del promedio va fuera del gráfico, arriba a la derecha
+            fig.add_annotation(
+                xref="paper",
+                yref="paper",
+                x=1,
+                y=1.02,
+                xanchor="right",
+                yanchor="bottom",
+                showarrow=False,
+                text=f"– – –  Promedio general: {promedio_general:.1f}%",
+                font=dict(size=12, color="#4a4a4a")
+            )
+
+            fig.update_xaxes(type="category")
+            fig.update_yaxes(range=[0, y_maximo])
+            fig.update_layout(showlegend=False, height=500)
+
+        else:
+            indicador = input.indicador_social()
+            nombre_indicador = "Depresión (PHQ-9)" if indicador == "PHQ9" else "Ansiedad (GAD-7)"
+
+            fig = px.box(
+                datos,
+                x="Grupo",
+                y=indicador,
+                color="Grupo",
+                color_discrete_sequence=paleta,
+                points="outliers",
+                category_orders={"Grupo": etiquetas},
+                labels={
+                    "Grupo": f"{nombre} (rango del grupo)",
+                    indicador: nombre_indicador
+                },
+                title=f"{nombre_indicador} según {nombre.lower()}",
+                template="plotly_white"
+            )
+            fig.update_xaxes(type="category")
+            fig.update_layout(showlegend=False, height=500)
+
+        fig.update_layout(title_x=0.5, margin=dict(t=90, b=70))
+        return fig
+
+    @render.text
+    def resumen_social():
+        datos, _ = datos_social()
+        return f"Estudiantes analizados: {len(datos)}"
+
+    @render.ui
+    def interpretacion_social():
+        datos, _ = datos_social()
+        variable = input.variable_social()
+        nombre = NOMBRES_SOCIAL[variable].lower()
+
+        if len(datos) < 3:
+            return ui.p("Se requieren al menos 3 observaciones para realizar el análisis.")
+
+        def describir(r):
+            magnitud = abs(r)
+            if magnitud < 0.20:
+                fuerza = "muy débil"
+            elif magnitud < 0.40:
+                fuerza = "débil"
+            elif magnitud < 0.60:
+                fuerza = "moderada"
+            elif magnitud < 0.80:
+                fuerza = "fuerte"
+            else:
+                fuerza = "muy fuerte"
+            direccion = "positiva" if r > 0 else "negativa" if r < 0 else "nula"
+            return f"r = {r:.3f} (asociación {direccion} {fuerza})"
+
+        r_estado = datos[variable].corr(datos["MentalHealthStatus"])
+        r_phq = datos[variable].corr(datos["PHQ9"])
+        r_gad = datos[variable].corr(datos["GAD7"])
+
+        resumen = datos.groupby("Grupo", observed=True)["MentalHealthStatus"].mean() * 100
+        mejor, peor = resumen.idxmax(), resumen.idxmin()
+
+        return ui.div(
+            ui.h4("Resumen estadístico"),
+            ui.p(f"Porcentaje general de estudiantes saludables: {datos['MentalHealthStatus'].mean() * 100:.1f}%"),
+            ui.p(
+                f"Grupo con mayor porcentaje de estudiantes saludables ({nombre}: {mejor}): {resumen.max():.1f}%. "
+                f"Grupo con menor porcentaje ({nombre}: {peor}): {resumen.min():.1f}%."
+            ),
+            ui.hr(),
+            ui.h4(f"Correlaciones de Pearson con {nombre}"),
+            ui.p(f"Estado de salud mental (0 = en riesgo, 1 = saludable): {describir(r_estado)}."),
+            ui.p(f"Depresión (PHQ-9): {describir(r_phq)}."),
+            ui.p(f"Ansiedad (GAD-7): {describir(r_gad)}."),
+            ui.hr(),
+            ui.p(
+                "Las correlaciones describen asociaciones lineales y no implican causalidad. "
+                "Cuando |r| es muy cercano a 0, el factor social elegido casi no explica "
+                "las diferencias en salud mental dentro de este conjunto de datos."
+            )
+        )
 
 app = App(app_ui, server)
