@@ -18,6 +18,18 @@ df = pd.read_csv(CSV)
 # Paleta inspirada en la imagen de referencia (morado -> coral/rosa -> naranja -> amarillo cálido)
 PALETA_SUENO = ["#6a51a3", "#9e5db6", "#d6728c", "#eb9678", "#f8b365", "#fdd458"]
 
+# Imagen del pie de página: se lee del disco y se incrusta en la propia página,
+# así no depende de que el servidor entregue la carpeta www.
+def cargar_imagen_base64(ruta):
+    try:
+        import base64
+        datos = Path(ruta).read_bytes()
+        return "data:image/png;base64," + base64.b64encode(datos).decode("ascii")
+    except Exception:
+        return None
+
+FOOTER_IMG = cargar_imagen_base64(BASE / "www" / "footer.png")
+
 # ==========================================
 # COMPONENTES DE DISEÑO
 # ==========================================
@@ -380,7 +392,7 @@ app_ui = ui.page_fluid(
     ),
     ui.tags.footer(
         ui.tags.img(
-            src="/footer.png",
+            src=FOOTER_IMG or "/footer.png",
             alt="Salud mental universitaria",
             class_="footer-imagen"
         ),
